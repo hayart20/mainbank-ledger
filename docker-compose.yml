@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: asb-postgres
+    environment:
+      POSTGRES_DB: mainbank_db
+      POSTGRES_USER: asb_app
+      POSTGRES_PASSWORD: SecurePassword123!
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U asb_app -d mainbank_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    # The spec image (minio/minio:RELEASE.2023-09-04...) is no longer pullable from Docker Hub/Quay.
+    image: ${MINIO_IMAGE:-cgr.dev/chainguard/minio:latest}
+    container_name: asb-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadminpassword
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      # no curl in this image: raw HTTP probe over bash /dev/tcp
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf \"GET /minio/health/live HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n\" >&3 && read -r line <&3 && [[ $$line == *200* ]]"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: ${MINIO_MC_IMAGE:-cgr.dev/chainguard/minio-client:latest}
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MC_HOST_myminio: http://minioadmin:minioadminpassword@minio:9000
+    # Bucket stays PRIVATE: receipts are served only through 15-minute pre-signed URLs.
+    command: ["mb", "--ignore-existing", "myminio/transaction-receipts"]
+
+  app:
+    build: .
+    container_name: asb-backend-app
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mainbank_db
+      SPRING_DATASOURCE_USERNAME: asb_app
+      SPRING_DATASOURCE_PASSWORD: SecurePassword123!
+      MINIO_ENDPOINT: http://minio:9000
+      # pre-signed URLs are opened by the client on the host, not inside the compose network
+      MINIO_PUBLIC_ENDPOINT: http://localhost:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadminpassword
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
+  miniodata:
