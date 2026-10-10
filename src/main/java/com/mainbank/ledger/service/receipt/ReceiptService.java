@@ -1,6 +1,5 @@
 package com.mainbank.ledger.service.receipt;
 
-import com.mainbank.ledger.event.TransferCompletedEvent;
 import com.mainbank.ledger.util.Hashing;
 
 import com.mainbank.ledger.config.LedgerProperties;
@@ -12,11 +11,8 @@ import com.mainbank.ledger.repository.TransferRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.Instant;
 import java.util.Set;
@@ -39,7 +35,7 @@ public class ReceiptService {
     private final ReceiptStorage storage;
     private final LedgerProperties props;
 
-    /** Single-instance guard against the async listener and the retry job racing on the same transfer. */
+    /** Single-instance guard against the Kafka consumer and the retry job racing on the same transfer. */
     private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
 
     public ReceiptService(TransferRepository transfers, AccountRepository accounts, ReceiptPdfGenerator pdf,
@@ -49,12 +45,6 @@ public class ReceiptService {
         this.pdf = pdf;
         this.storage = storage;
         this.props = props;
-    }
-
-    @Async("receiptExecutor")
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void onTransferCompleted(TransferCompletedEvent event) {
-        generateAndStore(event.transferId());
     }
 
     public void generateAndStore(UUID transferId) {

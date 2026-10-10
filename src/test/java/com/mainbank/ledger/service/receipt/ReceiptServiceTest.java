@@ -6,7 +6,6 @@ import com.mainbank.ledger.domain.constant.ReceiptStatus;
 import com.mainbank.ledger.domain.constant.TransferType;
 import com.mainbank.ledger.domain.entity.Account;
 import com.mainbank.ledger.domain.entity.Transfer;
-import com.mainbank.ledger.event.TransferCompletedEvent;
 import com.mainbank.ledger.repository.AccountRepository;
 import com.mainbank.ledger.repository.TransferRepository;
 import com.mainbank.ledger.util.Hashing;
@@ -86,16 +85,6 @@ class ReceiptServiceTest {
         verify(storage).put(key, PDF, detailsHash);
         verify(transfers).markReceiptReady(transfer.getId(), key, detailsHash, Hashing.sha256Hex(PDF));
         verify(transfers, never()).markReceiptFailed(any());
-    }
-
-    @Test
-    void asyncListenerGeneratesTheReceiptForTheEventsTransfer() {
-        givenTransferAndAccounts();
-        when(pdf.generate(any())).thenReturn(PDF);
-
-        service.onTransferCompleted(new TransferCompletedEvent(transfer.getId()));
-
-        verify(transfers).markReceiptReady(eq(transfer.getId()), anyString(), anyString(), anyString());
     }
 
     @Test

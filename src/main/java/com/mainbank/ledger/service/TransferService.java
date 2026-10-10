@@ -10,11 +10,10 @@ import com.mainbank.ledger.domain.entity.Transfer;
 import com.mainbank.ledger.domain.exception.DomainException;
 import com.mainbank.ledger.dto.TransferRequest;
 import com.mainbank.ledger.dto.TransferResponse;
-import com.mainbank.ledger.event.TransferCompletedEvent;
+import com.mainbank.ledger.messaging.TransferEventProducer;
 import com.mainbank.ledger.repository.IdempotencyRepository;
 import com.mainbank.ledger.repository.LedgerEntryRepository;
 import com.mainbank.ledger.util.Hashing;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,24 +39,18 @@ public class TransferService {
     private final IdempotencyRepository idempotency;
 
     /**
-     * Spring's in-process event bus, used to tell the receipt subsystem that a transfer happened without
-     * {@code TransferService} depending on it.
-     * <p>
-     * Why an event and not a direct call to {@code ReceiptService}: the PDF and MinIO upload are slow and can
-     * fail, and must neither hold the account row locks nor be able to roll back a money movement. The event is
-     * published inside the transfer transaction, but {@code ReceiptService} listens with
-     * {@code @TransactionalEventListener(AFTER_COMMIT)} and {@code @Async}: the receipt is only generated if the
-     * transaction really committed (a rolled-back transfer produces no receipt), and it runs on a separate thread
-     * pool after the locks are released. It also keeps the dependency one-way: the transfer code knows only the
-     * event, not how receipts are made.
+     * Announces a completed transfer to the receipt pipeline over Kafka, without {@code TransferService}
+     * depending on how receipts are made. The producer sends only after this transaction commits, so a
+     * rolled-back transfer produces no receipt, and the PDF/MinIO work happens in the Kafka consumer, outside the
+     * money transaction and its row locks. A lost message is recovered by the receipt retry job.
      */
-    private final ApplicationEventPublisher events;
+    private final TransferEventProducer events;
 
     private final ObjectMapper json;
     private final LedgerProperties props;
 
     public TransferService(LedgerPostingService ledgerPostingService, LedgerEntryRepository ledger, IdempotencyRepository idempotency,
-                           ApplicationEventPublisher events, ObjectMapper json, LedgerProperties props) {
+                           TransferEventProducer events, ObjectMapper json, LedgerProperties props) {
         this.ledgerPostingService = ledgerPostingService;
         this.ledger = ledger;
         this.idempotency = idempotency;
@@ -124,7 +117,7 @@ public class TransferService {
 
         Transfer transfer = ledgerPostingService.post(idempotencyKey, TransferType.TRANSFER, request.sourceAccountId(),
                 request.targetAccountId(), request.amount(), request.currency(), false);
-        events.publishEvent(new TransferCompletedEvent(transfer.getId()));
+        events.publishAfterCommit(transfer.getId());
 
         TransferResponse body = TransferResponse.from(transfer, ledger.findByTransferIdOrderByIdAsc(transfer.getId()), null);
         idempotency.complete(idempotencyKey, transfer.getId(), CREATED, serialize(body));

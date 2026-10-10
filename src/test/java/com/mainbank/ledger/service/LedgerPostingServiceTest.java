@@ -9,7 +9,7 @@ import com.mainbank.ledger.domain.entity.Account;
 import com.mainbank.ledger.domain.entity.LedgerEntry;
 import com.mainbank.ledger.domain.entity.Transfer;
 import com.mainbank.ledger.domain.exception.DomainException;
-import com.mainbank.ledger.event.TransferCompletedEvent;
+import com.mainbank.ledger.messaging.TransferEventProducer;
 import com.mainbank.ledger.repository.AccountRepository;
 import com.mainbank.ledger.repository.LedgerEntryRepository;
 import com.mainbank.ledger.repository.TransferRepository;
@@ -25,7 +25,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -55,7 +54,7 @@ class LedgerPostingServiceTest {
     @Mock AccountRepository accounts;
     @Mock TransferRepository transfers;
     @Mock LedgerEntryRepository ledger;
-    @Mock ApplicationEventPublisher events;
+    @Mock TransferEventProducer events;
     @Mock EntityManager em;
 
     private LedgerPostingService service;
@@ -246,6 +245,6 @@ class LedgerPostingServiceTest {
         assertThat(t.getSourceAccountId()).isEqualTo(settlementId);
         assertThat(customer.getBalance()).isEqualByComparingTo("500.00");
         assertThat(settlement.getBalance()).isEqualByComparingTo("-500.00");
-        verify(events).publishEvent(new TransferCompletedEvent(t.getId()));
+        verify(events).publishAfterCommit(t.getId());
     }
 }
