@@ -45,7 +45,6 @@ abstract class AbstractIntegrationTest {
         registry.add("minio.secret-key", () -> "minioadminpassword");
         // short so a paused MinIO fails an upload in seconds instead of the production 10s/30s
         registry.add("minio.attempt-timeout", () -> "2s");
-        registry.add("minio.call-timeout", () -> "6s");
         registry.add("ledger.receipt.retry-interval", () -> "PT2S");
         registry.add("ledger.receipt.retry-min-age", () -> "1s");
     }
