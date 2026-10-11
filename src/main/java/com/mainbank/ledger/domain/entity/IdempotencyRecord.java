@@ -1,11 +1,9 @@
 package com.mainbank.ledger.domain.entity;
 
 import jakarta.persistence.*;
-import lombok.Getter;
 
 import java.util.UUID;
 
-@Getter
 @Entity
 @Table(name = "idempotency_keys")
 public class IdempotencyRecord {
@@ -27,4 +25,14 @@ public class IdempotencyRecord {
     private String responseBody;
 
     protected IdempotencyRecord() { }
+
+    public UUID getKey() { return key; }
+
+    public String getRequestHash() { return requestHash; }
+
+    public UUID getTransferId() { return transferId; }
+
+    public Integer getResponseStatus() { return responseStatus; }
+
+    public String getResponseBody() { return responseBody; }
 }

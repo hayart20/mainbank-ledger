@@ -3,14 +3,12 @@ package com.mainbank.ledger.domain.entity;
 import com.mainbank.ledger.domain.constant.EntryType;
 
 import jakarta.persistence.*;
-import lombok.Getter;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
 /** Immutable posting leg. Rows are append-only: all columns are non-updatable (edits are never flushed) and removal is rejected. */
-@Getter
 @Entity
 @Table(name = "ledger_entries")
 public class LedgerEntry {
@@ -44,6 +42,18 @@ public class LedgerEntry {
         this.amount = amount;
         this.createdAt = Instant.now();
     }
+
+    public Long getId() { return id; }
+
+    public UUID getTransferId() { return transferId; }
+
+    public UUID getAccountId() { return accountId; }
+
+    public EntryType getEntryType() { return entryType; }
+
+    public BigDecimal getAmount() { return amount; }
+
+    public Instant getCreatedAt() { return createdAt; }
 
     /**
      * JPA lifecycle callback invoked before Hibernate writes an UPDATE for this entry; it always throws, so a

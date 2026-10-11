@@ -6,7 +6,6 @@ import com.mainbank.ledger.domain.constant.Currency;
 import com.mainbank.ledger.domain.exception.DomainException;
 
 import jakarta.persistence.*;
-import lombok.Getter;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -19,7 +18,6 @@ import java.util.UUID;
  * Locking, ledger entries and transactions stay in the services; callers must hold a row lock
  * ({@code SELECT ... FOR UPDATE}) while changing the balance.
  */
-@Getter
 @Entity
 @Table(name = "accounts")
 public class Account {
@@ -62,6 +60,26 @@ public class Account {
      * account; use {@link #open} instead.
      */
     protected Account() { }
+
+    public UUID getId() { return id; }
+
+    public String getIban() { return iban; }
+
+    public String getOwnerName() { return ownerName; }
+
+    public Currency getCurrency() { return currency; }
+
+    public BigDecimal getBalance() { return balance; }
+
+    public BigDecimal getOverdraftLimit() { return overdraftLimit; }
+
+    public AccountStatus getStatus() { return status; }
+
+    public boolean isSystemAccount() { return systemAccount; }
+
+    public Instant getCreatedAt() { return createdAt; }
+
+    public Instant getUpdatedAt() { return updatedAt; }
 
     /**
      * Opens a new account in a valid initial state: random id, zero balance, {@link AccountStatus#ACTIVE},
