@@ -53,9 +53,8 @@ minio:
   bucket: transaction-receipts
   region: us-east-1
   presign-ttl: 15m
-  # upload/download must never hang a receipt thread: per-attempt and total (incl. SDK retries) limits
+  # upload/download must never hang a receipt thread: limit for one HTTP request (no internal retries)
   attempt-timeout: 10s
-  call-timeout: 30s
 
 ledger:
   kafka:
