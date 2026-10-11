@@ -2,7 +2,7 @@
 
 Multi-currency double-entry ledger with ACID transfers, DB-backed idempotency and asynchronous,
 hash-stamped PDF receipts in MinIO, triggered through Kafka.
-Spring Boot 3.3 · Java 21 · PostgreSQL 15 · Flyway · Kafka · AWS SDK v2 · Testcontainers.
+Spring Boot 3.5 · Java 25 · PostgreSQL 15 · Flyway · Kafka · AWS SDK v2 · Testcontainers.
 
 ## Run
 

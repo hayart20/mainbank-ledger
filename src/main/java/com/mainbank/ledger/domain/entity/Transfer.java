@@ -6,13 +6,11 @@ import com.mainbank.ledger.domain.constant.TransferStatus;
 import com.mainbank.ledger.domain.constant.TransferType;
 
 import jakarta.persistence.*;
-import lombok.Getter;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
-@Getter
 @Entity
 @Table(name = "transfers")
 public class Transfer {
@@ -64,6 +62,34 @@ public class Transfer {
     private Instant createdAt;
 
     protected Transfer() { }
+
+    public UUID getId() { return id; }
+
+    public UUID getIdempotencyKey() { return idempotencyKey; }
+
+    public TransferType getType() { return type; }
+
+    public UUID getSourceAccountId() { return sourceAccountId; }
+
+    public UUID getTargetAccountId() { return targetAccountId; }
+
+    public BigDecimal getAmount() { return amount; }
+
+    public Currency getCurrency() { return currency; }
+
+    public TransferStatus getStatus() { return status; }
+
+    public ReceiptStatus getReceiptStatus() { return receiptStatus; }
+
+    public String getReceiptObjectKey() { return receiptObjectKey; }
+
+    public String getReceiptSha256() { return receiptSha256; }
+
+    public String getReceiptPdfSha256() { return receiptPdfSha256; }
+
+    public int getReceiptAttempts() { return receiptAttempts; }
+
+    public Instant getCreatedAt() { return createdAt; }
 
     /**
      * Creates the record of a transfer whose money movement has just been executed.
