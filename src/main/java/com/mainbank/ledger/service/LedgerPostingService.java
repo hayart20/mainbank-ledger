@@ -9,13 +9,12 @@ import com.mainbank.ledger.domain.entity.Account;
 import com.mainbank.ledger.domain.entity.LedgerEntry;
 import com.mainbank.ledger.domain.entity.Transfer;
 import com.mainbank.ledger.domain.exception.DomainException;
-import com.mainbank.ledger.event.TransferCompletedEvent;
+import com.mainbank.ledger.messaging.TransferEventProducer;
 import com.mainbank.ledger.repository.AccountRepository;
 import com.mainbank.ledger.repository.LedgerEntryRepository;
 import com.mainbank.ledger.repository.TransferRepository;
 import com.mainbank.ledger.util.SystemAccounts;
 import jakarta.persistence.EntityManager;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,12 +37,12 @@ public class LedgerPostingService {
     private final AccountRepository accounts;
     private final TransferRepository transfers;
     private final LedgerEntryRepository ledger;
-    private final ApplicationEventPublisher events;
+    private final TransferEventProducer events;
     private final EntityManager em;
     private final LedgerProperties props;
 
     public LedgerPostingService(AccountRepository accounts, TransferRepository transfers, LedgerEntryRepository ledger,
-                                ApplicationEventPublisher events, EntityManager em, LedgerProperties props) {
+                                TransferEventProducer events, EntityManager em, LedgerProperties props) {
         this.accounts = accounts;
         this.transfers = transfers;
         this.ledger = ledger;
@@ -156,7 +155,7 @@ public class LedgerPostingService {
     public Transfer openingDeposit(Account target, BigDecimal amount) {
         Transfer transfer = post(UUID.randomUUID(), TransferType.OPENING_DEPOSIT,
                 SystemAccounts.settlementFor(target.getCurrency()), target.getId(), amount, target.getCurrency(), true);
-        events.publishEvent(new TransferCompletedEvent(transfer.getId()));
+        events.publishAfterCommit(transfer.getId());
         return transfer;
     }
 

@@ -12,7 +12,7 @@ import com.mainbank.ledger.domain.entity.Transfer;
 import com.mainbank.ledger.domain.exception.DomainException;
 import com.mainbank.ledger.dto.TransferRequest;
 import com.mainbank.ledger.dto.TransferResponse;
-import com.mainbank.ledger.event.TransferCompletedEvent;
+import com.mainbank.ledger.messaging.TransferEventProducer;
 import com.mainbank.ledger.repository.IdempotencyRepository;
 import com.mainbank.ledger.repository.LedgerEntryRepository;
 import com.mainbank.ledger.util.Hashing;
@@ -23,7 +23,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -55,7 +54,7 @@ class TransferServiceTest {
     @Mock LedgerPostingService posting;
     @Mock LedgerEntryRepository ledger;
     @Mock IdempotencyRepository idempotency;
-    @Mock ApplicationEventPublisher events;
+    @Mock TransferEventProducer events;
 
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules();
     private final UUID key = UUID.randomUUID();
@@ -95,7 +94,7 @@ class TransferServiceTest {
         assertThat(result.body().id()).isEqualTo(transfer.getId());
         assertThat(result.body().amount()).isEqualByComparingTo("250.25");
 
-        verify(events).publishEvent(new TransferCompletedEvent(transfer.getId()));
+        verify(events).publishAfterCommit(transfer.getId());
         ArgumentCaptor<String> cached = ArgumentCaptor.forClass(String.class);
         verify(idempotency).complete(eq(key), eq(transfer.getId()), eq(TransferService.CREATED), cached.capture());
         assertThat(cached.getValue()).contains(transfer.getId().toString());

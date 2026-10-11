@@ -1,12 +1,13 @@
 # Mainbank Ledger
 
 Multi-currency double-entry ledger with ACID transfers, DB-backed idempotency and asynchronous,
-hash-stamped PDF receipts in MinIO. Spring Boot 3.3 · Java 21 · PostgreSQL 15 · Flyway · AWS SDK v2 · Testcontainers.
+hash-stamped PDF receipts in MinIO, triggered through Kafka.
+Spring Boot 3.3 · Java 21 · PostgreSQL 15 · Flyway · Kafka · AWS SDK v2 · Testcontainers.
 
 ## Run
 
 ```bash
-docker compose up --build          # postgres + minio + bucket + app on :8080
+docker compose up --build          # postgres + minio + bucket + kafka + app on :8080
 mvn test                           # unit tests only (*Test, Surefire) - fast, no Docker needed
 mvn verify                         # unit tests, then Testcontainers integration tests (*IT, Failsafe) - needs a Docker daemon
 ```
@@ -93,9 +94,12 @@ Controller → Service (transaction boundary) → Repository → PostgreSQL
   and `LedgerEntry` is append-only in Java (no setters, every column `updatable = false`, `@PreRemove` rejects deletes). A bulk JPQL/SQL
   statement would bypass this - restrict the app DB role to INSERT/SELECT on `ledger_entries` in production.
 * **Receipts are outside the money transaction.** PDF + S3 I/O must not hold row locks or fail a transfer. The
-  listener is `AFTER_COMMIT` + bounded `@Async` pool. If the pool is full, MinIO is down, or the JVM dies
-  between commit and upload, the row stays `PENDING/FAILED` and a scheduler retries (max 5 attempts, then it
-  stays `FAILED` for ops – visible in the DB and in `GET /transfers/{id}`).
+  trigger is a Kafka message (`ledger.transfer.completed`, key = transferId) that is sent only **after the
+  transfer transaction commits** (best effort: a failed send is logged, never fails the transfer). A consumer in
+  group `mainbank-ledger-receipts` generates the receipt; malformed messages go to `ledger.transfer.completed.DLT`.
+  If Kafka or MinIO is down, a message is lost, or the JVM dies between commit and upload, the row stays
+  `PENDING/FAILED` and a scheduler retries (max 5 attempts, then it stays `FAILED` for ops – visible in the DB and
+  in `GET /transfers/{id}`). Consumers are idempotent, so redelivery is harmless.
 * **Hashes:** `receipt_sha256` = SHA-256 of the canonical transaction string, printed in the PDF (re-computable
   from DB columns). `receipt_pdf_sha256` = digest of the stored file; the details hash is also S3 object metadata.
   Object key is deterministic (`receipts/{transferId}.pdf`) and never rewritten once `READY`.

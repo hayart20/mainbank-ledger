@@ -6,6 +6,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.kafka.KafkaContainer;
 
 import java.time.Duration;
 
@@ -23,9 +24,12 @@ abstract class AbstractIntegrationTest {
             .withExposedPorts(9000)
             .waitingFor(Wait.forHttp("/minio/health/live").forPort(9000).withStartupTimeout(Duration.ofSeconds(60)));
 
+    static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka:3.8.0");
+
     static {
         POSTGRES.start();
         MINIO.start();
+        KAFKA.start();
     }
 
     @DynamicPropertySource
@@ -34,6 +38,7 @@ abstract class AbstractIntegrationTest {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
         registry.add("minio.endpoint", () -> endpoint);
         registry.add("minio.public-endpoint", () -> endpoint);
         registry.add("minio.access-key", () -> "minioadmin");
