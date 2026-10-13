@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      server:
+        webflux:
+          # a dead or hung service must fail fast (502/504) instead of tying up requests indefinitely
+          httpclient:
+            connect-timeout: 2000
+            response-timeout: 30s
+          # first matching route wins: the more specific statement route must come before the generic accounts route
+          routes:
+            - id: statement-service
+              uri: ${gateway.statement-url:http://localhost:8083}
+              predicates:
+                - Path=/api/v1/accounts/*/statement
+            - id: ledger-accounts
+              uri: ${gateway.ledger-url:http://localhost:8080}
+              predicates:
+                - Path=/api/v1/accounts/**
+            - id: ledger-transfers
+              uri: ${gateway.ledger-url:http://localhost:8080}
+              predicates:
+                - Path=/api/v1/transfers/**
+            - id: receipt-service
+              uri: ${gateway.receipt-url:http://localhost:8081}
+              predicates:
+                - Path=/api/v1/receipts/**
+
+server:
+  port: 8080
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # not "gateway": it would publish the internal route table on the public port
+        include: health,info

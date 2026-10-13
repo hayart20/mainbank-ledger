@@ -74,12 +74,19 @@ services:
       retries: 10
       start_period: 15s
 
+  # ledger-service: accounts, transfers, double-entry ledger; publishes ledger.transfer.completed
   app:
-    build: .
+    build:
+      context: .
+      args:
+        MODULE: ledger-service
+        PORT: "8080"
     container_name: asb-backend-app
-    ports:
-      - "8080:8080"
+    # container limit: the JVM sizes its heap from this (MaxRAMPercentage), not from the whole Docker VM
+    mem_limit: 1g
     environment:
+      # heap = 55% of the container limit; the rest is for metaspace, threads, code cache and direct buffers
+      JAVA_OPTS: "-XX:MaxRAMPercentage=55"
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mainbank_db
       SPRING_DATASOURCE_USERNAME: asb_app
       SPRING_DATASOURCE_PASSWORD: SecurePassword123!
@@ -98,6 +105,143 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  # receipt-service: Kafka consumer of ledger.transfer.completed; builds the PDF, stores it in MinIO, serves it
+  receipt-service:
+    build:
+      context: .
+      args:
+        MODULE: receipt-service
+        PORT: "8081"
+    container_name: asb-receipt-service
+    # container limit: the JVM sizes its heap from this (MaxRAMPercentage), not from the whole Docker VM
+    mem_limit: 640m
+    environment:
+      # heap = 55% of the container limit; the rest is for metaspace, threads, code cache and direct buffers
+      JAVA_OPTS: "-XX:MaxRAMPercentage=55"
+      # own schema ("receipt") in the shared database
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mainbank_db?currentSchema=receipt
+      SPRING_DATASOURCE_USERNAME: asb_app
+      SPRING_DATASOURCE_PASSWORD: SecurePassword123!
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: http://localhost:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadminpassword
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      # start after the ledger so its schema exists when the one-off receipt import runs
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  # notification-service: Kafka consumer; tells the account holders about every completed transfer
+  notification-service:
+    build:
+      context: .
+      args:
+        MODULE: notification-service
+        PORT: "8082"
+    container_name: asb-notification-service
+    # container limit: the JVM sizes its heap from this (MaxRAMPercentage), not from the whole Docker VM
+    mem_limit: 512m
+    environment:
+      # heap = 55% of the container limit; the rest is for metaspace, threads, code cache and direct buffers
+      JAVA_OPTS: "-XX:MaxRAMPercentage=55"
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mainbank_db?currentSchema=notification
+      SPRING_DATASOURCE_USERNAME: asb_app
+      SPRING_DATASOURCE_PASSWORD: SecurePassword123!
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  # statement-service: Kafka consumer; keeps a read model of account activity and serves statements
+  statement-service:
+    build:
+      context: .
+      args:
+        MODULE: statement-service
+        PORT: "8083"
+    container_name: asb-statement-service
+    # container limit: the JVM sizes its heap from this (MaxRAMPercentage), not from the whole Docker VM
+    mem_limit: 640m
+    environment:
+      # heap = 55% of the container limit; the rest is for metaspace, threads, code cache and direct buffers
+      JAVA_OPTS: "-XX:MaxRAMPercentage=55"
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mainbank_db?currentSchema=statement
+      SPRING_DATASOURCE_USERNAME: asb_app
+      SPRING_DATASOURCE_PASSWORD: SecurePassword123!
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8083/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  # api-gateway: the only service published to the host (:8080); routes /api/v1 to the services above
+  api-gateway:
+    build:
+      context: .
+      args:
+        MODULE: api-gateway
+        PORT: "8080"
+    container_name: asb-api-gateway
+    # container limit: the JVM sizes its heap from this (MaxRAMPercentage), not from the whole Docker VM
+    mem_limit: 512m
+    ports:
+      - "8080:8080"
+    environment:
+      # heap = 55% of the container limit; the rest is for metaspace, threads, code cache and direct buffers
+      JAVA_OPTS: "-XX:MaxRAMPercentage=55"
+      GATEWAY_LEDGER_URL: http://app:8080
+      GATEWAY_RECEIPT_URL: http://receipt-service:8081
+      GATEWAY_STATEMENT_URL: http://statement-service:8083
+    depends_on:
+      app:
+        condition: service_healthy
+      receipt-service:
+        condition: service_healthy
+      statement-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q UP"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
 
 volumes:
   pgdata:

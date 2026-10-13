@@ -1,14 +1,36 @@
 # Mainbank Ledger
 
-Multi-currency double-entry ledger with ACID transfers, DB-backed idempotency and asynchronous,
-hash-stamped PDF receipts in MinIO, triggered through Kafka.
+Multi-currency double-entry ledger with ACID transfers and DB-backed idempotency, built as a small set of
+microservices that talk through Kafka: the **ledger-service** moves money and announces every transfer, and
+independent consumers react to it (receipts, notifications, statements) behind one **api-gateway**.
 Spring Boot 3.5 · Java 25 · PostgreSQL 15 · Flyway · Kafka · JDK-only MinIO client (SigV4) · Testcontainers.
+
+```
+                              ┌─────────────▶ receipt-service :8081       PDF → MinIO, receipt API   (schema receipt)
+ client ─▶ api-gateway :8080 ─┼─────────────▶ statement-service :8083    read model, statements     (schema statement)
+              │               │                      ▲                         ▲
+              ▼               │                      │ Kafka: ledger.transfer.completed (key = transferId, DLT)
+        ledger-service :8080 ─┘──(outbox)────────────┴─────────────────────────┘
+        accounts, transfers, ledger (schema public)                             ▼
+                                                           notification-service :8082    notices      (schema notification)
+```
+
+| Service | Role | Owns |
+|---|---|---|
+| `api-gateway` | the only published port (`:8080`); routes `/api/v1/**` | nothing |
+| `ledger-service` | accounts, transfers, double-entry ledger; **producer** | schema `public` |
+| `receipt-service` | **consumer**: hash-stamped PDF receipts in MinIO, receipt API | schema `receipt` |
+| `notification-service` | **consumer**: notifies payer and payee (log sender, pluggable) | schema `notification` |
+| `statement-service` | **consumer**: read model of account activity, statement API | schema `statement` |
+
+Each consumer has its own consumer group, so every event reaches all of them independently and a new consumer
+needs no change to the ledger.
 
 ## Run
 
 ```bash
-docker compose up --build          # postgres + minio + bucket + kafka + app on :8080
-mvn test                           # unit tests only (*Test, Surefire) - fast, no Docker needed
+docker compose up --build          # postgres + minio + bucket + kafka + 4 services + api-gateway on :8080
+mvn test                           # unit tests only (*Test, Surefire) for all modules - fast, no Docker needed
 mvn verify                         # unit tests, then Testcontainers integration tests (*IT, Failsafe) - needs a Docker daemon
 ```
 
@@ -30,8 +52,9 @@ Unit and integration tests are separate: classes named `*Test` run in `mvn test`
 | POST | `/api/v1/accounts` | `ownerName`, `currency` (AMD/USD/EUR/RUB), optional `initialBalance`, `overdraftLimit`. IBAN generated (AM, mod-97 valid) |
 | GET | `/api/v1/accounts/{id}` | balance / status |
 | POST | `/api/v1/transfers` | requires `X-Idempotency-Key: <uuid>` → 201 (or 201 + `Idempotent-Replayed: true`) |
-| GET | `/api/v1/transfers/{id}` | status, ledger legs, receipt status + pre-signed URL when ready |
-| GET | `/api/v1/transfers/{id}/receipt` | `?mode=url` (default, 15 min pre-signed URL) or `?mode=stream` (PDF piped) |
+| GET | `/api/v1/transfers/{id}` | status and ledger legs |
+| GET | `/api/v1/receipts/{transferId}` | **receipt-service.** `?mode=url` (default, 15 min pre-signed URL) or `?mode=stream` (PDF piped); 409 until ready |
+| GET | `/api/v1/accounts/{id}/statement` | **statement-service.** `from` (inclusive) / `to` (exclusive) ISO instants, `page`, `size` (max 200); lines newest first + period totals |
 
 ```bash
 A=$(curl -s -X POST localhost:8080/api/v1/accounts -H 'Content-Type: application/json' \
@@ -43,22 +66,26 @@ curl -s -X POST localhost:8080/api/v1/transfers -H 'Content-Type: application/js
      -H "X-Idempotency-Key: $(uuidgen)" \
      -d "{\"sourceAccountId\":\"$A\",\"targetAccountId\":\"$B\",\"amount\":\"15000.50\",\"currency\":\"AMD\"}"
 
-curl -s localhost:8080/api/v1/transfers/<id>                    # ledger legs + receipt status
-curl -s localhost:8080/api/v1/transfers/<id>/receipt            # {"url": "...", "expiresAt": "...", "sha256": "..."}
-curl -s -o receipt.pdf "localhost:8080/api/v1/transfers/<id>/receipt?mode=stream"
+curl -s localhost:8080/api/v1/transfers/<id>                    # ledger legs
+curl -s localhost:8080/api/v1/receipts/<id>                      # {"url": "...", "expiresAt": "...", "sha256": "..."}
+curl -s -o receipt.pdf "localhost:8080/api/v1/receipts/<id>?mode=stream"
+curl -s "localhost:8080/api/v1/accounts/$A/statement?size=20"    # account activity + debit/credit totals
 ```
 
 Errors are RFC 7807 `application/problem+json` with a stable `code`:
 `INSUFFICIENT_FUNDS`, `ACCOUNT_NOT_ACTIVE`, `CURRENCY_MISMATCH`, `SAME_ACCOUNT`, `CBA_LIMIT_EXCEEDED`,
-`IDEMPOTENCY_KEY_REUSED` (422), `ACCOUNT_NOT_FOUND`/`TRANSFER_NOT_FOUND` (404), `RECEIPT_NOT_READY` (409),
+`IDEMPOTENCY_KEY_REUSED` (422), `ACCOUNT_NOT_FOUND`/`TRANSFER_NOT_FOUND` (404); receipt-service: `RECEIPT_NOT_FOUND` (404), `RECEIPT_NOT_READY` (409),
 `LOCK_TIMEOUT` (503 + `Retry-After`), `VALIDATION_FAILED`/`MISSING_HEADER` (400).
 
 ## Design
 
 ```
-Controller → Service (transaction boundary) → Repository → PostgreSQL
-                 └─ AFTER_COMMIT event → ReceiptService (async pool) → PDF → MinIO → UPDATE transfers
-                                         ReceiptService.retryPending (scheduled) ← FAILED / PENDING rows
+ledger-service:  Controller → Service (transaction boundary) → Repository → PostgreSQL
+                                  └─ same transaction: INSERT outbox_events
+                 OutboxRelay (scheduled) → Kafka ledger.transfer.completed   (at-least-once)
+
+receipt-service: @KafkaListener → INSERT receipts ON CONFLICT DO NOTHING → PDF → MinIO → UPDATE receipts
+                 retryPending (scheduled, claims rows optimistically) ← FAILED / PENDING rows
 ```
 
 **Money path – one DB transaction** (`TransferService.execute`):
@@ -66,7 +93,8 @@ Controller → Service (transaction boundary) → Repository → PostgreSQL
 2. `lock_timeout` (config `ledger.lock-timeout`, default 5s, set first so it also covers the idempotency wait), then `SELECT ... FOR UPDATE` on the two accounts **in ascending id order**.
 3. Validate (status, currency, CBA ceiling, overdraft) in the `Account` aggregate; mutate balances.
 4. Insert the transfer + DEBIT and CREDIT ledger rows; store the response body with the idempotency key.
-5. Commit. Only then is the receipt event delivered.
+5. The `transfer-completed` event is written to the `outbox_events` table in this same transaction, then commit.
+   The event exists if and only if the transfer committed; a relay publishes it to Kafka afterwards.
 
 ### Decisions and trade-offs
 
@@ -93,29 +121,40 @@ Controller → Service (transaction boundary) → Repository → PostgreSQL
 * **Defence in depth in the schema:** `CHECK (balance >= -overdraft_limit)`, positive amounts, `source <> target`,
   and `LedgerEntry` is append-only in Java (no setters, every column `updatable = false`, `@PreRemove` rejects deletes). A bulk JPQL/SQL
   statement would bypass this - restrict the app DB role to INSERT/SELECT on `ledger_entries` in production.
-* **Receipts are outside the money transaction.** PDF + S3 I/O must not hold row locks or fail a transfer. The
-  trigger is a Kafka message (`ledger.transfer.completed`, key = transferId) that is sent only **after the
-  transfer transaction commits** (best effort: a failed send is logged, never fails the transfer). A consumer in
-  group `mainbank-ledger-receipts` generates the receipt; malformed messages go to `ledger.transfer.completed.DLT`.
-  If Kafka or MinIO is down, a message is lost, or the JVM dies between commit and upload, the row stays
-  `PENDING/FAILED` and a scheduler retries (max 5 attempts, then it stays `FAILED` for ops – visible in the DB and
-  in `GET /transfers/{id}`). Consumers are idempotent, so redelivery is harmless.
-* **Hashes:** `receipt_sha256` = SHA-256 of the canonical transaction string, printed in the PDF (re-computable
-  from DB columns). `receipt_pdf_sha256` = digest of the stored file; the details hash is also S3 object metadata.
-  Object key is deterministic (`receipts/{transferId}.pdf`) and never rewritten once `READY`.
+* **Receipts are a separate service, outside the money transaction.** PDF + S3 I/O must not hold row locks or
+  fail a transfer, and the receipt service has its own database schema (`receipt`) and deploys independently.
+  The ledger announces every posting with a **self-contained** `ledger.transfer.completed` event (IBANs, owner
+  names, amount, currency, timestamp, `schemaVersion`; key = transferId), so the consumer never reads ledger
+  tables. The contract lives in the `ledger-events` module. The notification and statement services are further
+  consumers of the same topic, each with its own consumer group, added without any ledger change.
+* **Transactional outbox instead of "send after commit".** A best-effort send after commit can lose the event
+  (broker down, crash between commit and send). The event is therefore inserted into `outbox_events` in the
+  transfer's own transaction and published by `OutboxRelay` (`FOR UPDATE SKIP LOCKED`, so replicas cooperate)
+  with acknowledgement before it is marked published. Delivery is at-least-once; during a broker outage events
+  wait in the table and are delivered afterwards (covered by `TransferIT`).
+* **Idempotent consumer.** The receipt service inserts the row with `ON CONFLICT DO NOTHING` and never
+  regenerates a `READY` receipt, so redelivery is harmless. Malformed messages go to `ledger.transfer.completed.DLT`
+  without retries. If MinIO is down the receipt stays `FAILED/PENDING` and a scheduler retries (max 5 attempts);
+  several instances are safe because a row is claimed with an optimistic `UPDATE ... WHERE updated_at = :seen`.
+* **Existing receipts were imported** from `transfers.receipt_*` by the receipt service's `V2` migration (a no-op
+  on a fresh database). The now-unused `receipt_*` columns remain on `transfers` and can be dropped in a later
+  ledger migration, once every environment has run the import.
+* **Hashes:** `receipts.details_sha256` = SHA-256 of the canonical transaction string, printed in the PDF
+  (re-computable from the ledger). `receipts.pdf_sha256` = digest of the stored file; the details hash is also S3
+  object metadata. Object key is deterministic (`receipts/{transferId}.pdf`) and never rewritten once `READY`.
 * **Bucket is private**; downloads only via pre-signed URLs signed for `MINIO_PUBLIC_ENDPOINT` (the host is part
   of the SigV4 signature, so it must be the address the client uses, not the in-network `minio:9000`).
   The task's compose snippet sets `mc anonymous set download`, which would expose every receipt – deliberately omitted.
 
 ### Known limitations (would address next)
-* Retry job and async listener are de-duplicated with an in-JVM set; with several app instances use
-  `SELECT ... FOR UPDATE SKIP LOCKED` / a claim column.
 * PDFs use built-in Helvetica (Latin-1); Armenian/Cyrillic owner names print as `?` until a Unicode font is embedded.
   Hashes are computed over the real (Unicode) values.
 * No authN/Z, rate limiting, or per-customer daily CBA limits; a single configurable per-transfer ceiling stands in
   for CBA compliance.
 * True object immutability needs MinIO Object Lock (WORM) on the bucket; here immutability is by key discipline + hashes.
-* Failures of MinIO during `GET .../receipt?mode=stream` surface as 500; a circuit breaker would be next.
+* A MinIO failure during `GET /receipts/{id}?mode=stream` surfaces as 502 `STORAGE_UNAVAILABLE`; a circuit breaker would be next.
+* The outbox relay polls (500 ms): events reach Kafka within about a second, not instantly. Receipt-service and the
+  ledger share one Postgres server (separate schemas); a separate server per service is a configuration change.
 
 ## Stress testing concurrency
 
@@ -140,18 +179,37 @@ SELECT * FROM pg_locks WHERE NOT granted;
 ## Layout
 
 ```
-src/main/java/com/mainbank/ledger
-  domain/entity/     JPA entities with behaviour (Account.debit/credit)
-  domain/constant/   enums (Currency, AccountStatus, TransferType, ...)
-  domain/exception/  DomainException (code only, no HTTP knowledge; web layer maps ErrorCode -> status)
-  repository/  Spring Data repos (FOR UPDATE query, idempotency claim)
-  service/           TransferService (idempotency, limits), LedgerPostingService (locks + ledger posting), TransferLookupService, AccountService
-  service/receipt/   ReceiptService (async + retry), ReceiptPdfGenerator, ReceiptStorage (MinIO), ReceiptData
-  event/             TransferCompletedEvent
-  util/              Iban, Hashing, SystemAccounts
-  api/         controllers
-  dto/         request/response records
-  exception/   GlobalExceptionHandler (ErrorCode -> HTTP status)
-  config/      S3 clients, async pool, typed properties
-src/main/resources/db/migration/V1__ledger_schema.sql
+pom.xml                  parent POM (mainbank-platform), modules below
+ledger-events/           event contract shared by producer and consumers (plain types, no Spring)
+  com/mainbank/ledger/events/TransferCompletedMessage
+ledger-service/          the ledger microservice (accounts, transfers, double-entry ledger)
+  src/main/java/com/mainbank/ledger
+    domain/entity/     JPA entities with behaviour (Account.debit/credit)
+    domain/constant/   enums (Currency, AccountStatus, TransferType, ...)
+    domain/exception/  DomainException (code only, no HTTP knowledge; web layer maps ErrorCode -> status)
+    repository/        Spring Data repos (FOR UPDATE query, idempotency claim)
+    service/           TransferService (idempotency, limits), LedgerPostingService (locks + ledger posting), TransferLookupService, AccountService
+    messaging/         TransferEventProducer (writes the outbox), OutboxRelay (publishes to Kafka)
+    util/              Iban, Hashing, SystemAccounts
+    api/               controllers
+    dto/               request/response records
+    exception/         GlobalExceptionHandler (ErrorCode -> HTTP status)
+    config/            typed properties, scheduling
+  src/main/resources/db/migration/   V1 schema, V2 seed, V3 outbox
+receipt-service/         the receipt microservice: Kafka consumer, PDF, MinIO, receipt API
+  src/main/java/com/mainbank/receipt
+    messaging/         TransferCompletedConsumer (@KafkaListener, DLT error handler)
+    service/           ReceiptService (idempotent generate + retry), ReceiptPdfGenerator, ReceiptStorage, ReceiptQueryService
+    storage/           MinioClient + SigV4 (JDK-only S3 client)
+    domain/, repository/  Receipt entity and repository (own `receipt` schema)
+    api/, exception/   GET /api/v1/receipts/{transferId}, problem+json errors
+  src/main/resources/db/migration/   V1 receipts table, V2 one-off import from the ledger
+notification-service/    consumer: com/mainbank/notification  (NotificationService, NotificationSender, NotificationLog)
+statement-service/       consumer: com/mainbank/statement      (StatementService, StatementRepository, StatementController)
+api-gateway/             Spring Cloud Gateway: routes only (application.yml), no business code
 ```
+
+Build everything with `mvn verify` from the repository root. One root `Dockerfile` builds any service image:
+`docker build --build-arg MODULE=receipt-service --build-arg PORT=8081 .` (compose passes these for you).
+Only the gateway is published on the host; each container has a memory limit and its JVM heap is 55% of it
+(`JAVA_OPTS`, which overrides the Dockerfile defaults).

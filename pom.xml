@@ -11,122 +11,40 @@
     </parent>
 
     <groupId>com.mainbank</groupId>
-    <artifactId>mainbank-ledger</artifactId>
+    <artifactId>mainbank-platform</artifactId>
     <version>1.0.0</version>
-    <name>mainbank-ledger</name>
+    <packaging>pom</packaging>
+    <name>mainbank-platform</name>
+    <description>MainBank services: ledger, receipts and the shared event contract</description>
+
+    <modules>
+        <module>ledger-events</module>
+        <module>ledger-service</module>
+        <module>receipt-service</module>
+        <module>notification-service</module>
+        <module>statement-service</module>
+        <module>api-gateway</module>
+    </modules>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <java.version>25</java.version>
-        <openpdf.version>2.0.3</openpdf.version>
-        <springdoc.version>2.8.17</springdoc.version>
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
         <maven.compiler.proc>full</maven.compiler.proc>
+        <openpdf.version>2.0.3</openpdf.version>
+        <springdoc.version>2.8.17</springdoc.version>
+        <!-- 1.19.x cannot talk to Docker Engine 29+ (min API version bump) -->
         <testcontainers.version>1.21.3</testcontainers.version>
     </properties>
 
-    <dependencies>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-validation</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-jpa</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-database-postgresql</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.github.librepdf</groupId>
-            <artifactId>openpdf</artifactId>
-            <version>${openpdf.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-            <version>${springdoc.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>postgresql</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>kafka</artifactId>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <configuration>
-                    <!-- unit tests only (*Test); integration tests (*IT) run via Failsafe -->
-                    <excludes>
-                        <exclude>**/*IT.java</exclude>
-                    </excludes>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-failsafe-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>integration-test</goal>
-                            <goal>verify</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <systemPropertyVariables>
-                        <!-- docker-java defaults to API 1.32, which Docker Engine 29+ rejects -->
-                        <api.version>1.41</api.version>
-                    </systemPropertyVariables>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.mainbank</groupId>
+                <artifactId>ledger-events</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 </project>

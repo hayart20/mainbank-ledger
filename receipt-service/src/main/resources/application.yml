@@ -1,0 +1,60 @@
+spring:
+  application:
+    name: receipt-service
+  datasource:
+    # own schema in the shared Postgres: currentSchema puts it first on the search_path for every connection
+    url: jdbc:postgresql://localhost:5432/mainbank_db?currentSchema=receipt
+    username: asb_app
+    password: SecurePassword123!
+    hikari:
+      maximum-pool-size: 10
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+    # created on first start; the flyway history table lives there too, separate from the ledger's
+    schemas: receipt
+    create-schemas: true
+  jackson:
+    default-property-inclusion: non_null
+  kafka:
+    # host listener of docker-compose (the app container uses SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092)
+    bootstrap-servers: localhost:29092
+    consumer:
+      group-id: receipt-service
+      auto-offset-reset: earliest
+    listener:
+      concurrency: 3
+
+server:
+  port: 8081
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+minio:
+  endpoint: http://localhost:9000
+  # Host used inside pre-signed URLs - must be reachable by the API client, not just by the app
+  public-endpoint: ${minio.endpoint}
+  access-key: minioadmin
+  secret-key: minioadminpassword
+  bucket: transaction-receipts
+  region: us-east-1
+  presign-ttl: 15m
+  # upload/download must never hang a receipt thread: limit for one HTTP request (no internal retries)
+  attempt-timeout: 10s
+
+receipt:
+  kafka:
+    topic: ledger.transfer.completed
+  max-attempts: 5
+  retry-interval: PT30S
+  retry-min-age: 20s
