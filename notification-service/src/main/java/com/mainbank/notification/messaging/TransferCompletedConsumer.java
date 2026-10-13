@@ -2,7 +2,6 @@ package com.mainbank.notification.messaging;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mainbank.ledger.events.TransferCompletedMessage;
 import com.mainbank.notification.service.NotificationService;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;

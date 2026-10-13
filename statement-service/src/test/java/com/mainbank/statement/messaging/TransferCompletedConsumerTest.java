@@ -1,7 +1,6 @@
 package com.mainbank.statement.messaging;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mainbank.ledger.events.TransferCompletedMessage;
 import com.mainbank.statement.service.StatementService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,13 +31,32 @@ class TransferCompletedConsumerTest {
 
     @Test
     void selfContainedMessageIsHandedToTheService() throws Exception {
-        TransferCompletedMessage message = new TransferCompletedMessage(1, UUID.randomUUID(), "TRANSFER",
+        TransferCompletedMessage message = new TransferCompletedMessage(UUID.randomUUID(), "TRANSFER",
                 Instant.parse("2026-01-02T03:04:05.123Z"), UUID.randomUUID(), "AM11", "Anna",
                 UUID.randomUUID(), "AM22", "Bob", new BigDecimal("12.30"), "AMD");
 
         consumer.onTransferCompleted(json.writeValueAsString(message));
 
         verify(statements).onTransferCompleted(message);
+    }
+
+    /** The event exactly as the ledger publishes it, plus a future field: fields not needed here are ignored. */
+    @Test
+    void readsTheLedgersPublishedFormatAndIgnoresFieldsItDoesNotKnow() {
+        UUID id = UUID.fromString("11111111-2222-3333-4444-555555555555");
+        UUID source = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
+        UUID target = UUID.fromString("bbbbbbbb-0000-0000-0000-000000000002");
+        String payload = """
+                {"schemaVersion":1,"transferId":"%s","type":"TRANSFER","createdAt":"2026-01-02T03:04:05.123Z",
+                 "sourceAccountId":"%s","sourceIban":"AM11","sourceOwner":"Anna",
+                 "targetAccountId":"%s","targetIban":"AM22","targetOwner":"Bob",
+                 "amount":12.30,"currency":"AMD","someFutureField":{"x":1}}""".formatted(id, source, target);
+
+        consumer.onTransferCompleted(payload);
+
+        verify(statements).onTransferCompleted(new TransferCompletedMessage(id, "TRANSFER",
+                Instant.parse("2026-01-02T03:04:05.123Z"), source, "AM11", "Anna", target, "AM22", "Bob",
+                new BigDecimal("12.30"), "AMD"));
     }
 
     @Test

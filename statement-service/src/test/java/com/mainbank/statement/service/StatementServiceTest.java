@@ -1,6 +1,6 @@
 package com.mainbank.statement.service;
 
-import com.mainbank.ledger.events.TransferCompletedMessage;
+import com.mainbank.statement.messaging.TransferCompletedMessage;
 import com.mainbank.statement.dto.StatementResponse;
 import com.mainbank.statement.repository.StatementRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,7 +43,7 @@ class StatementServiceTest {
 
     @Test
     void recordsADebitForThePayerAndACreditForThePayeeWithTheCounterparty() {
-        var m = new TransferCompletedMessage(1, transferId, "TRANSFER", WHEN, source, "AM11", "Anna",
+        var m = new TransferCompletedMessage(transferId, "TRANSFER", WHEN, source, "AM11", "Anna",
                 target, "AM22", "Bob", new BigDecimal("25.50"), "USD");
 
         service.onTransferCompleted(m);

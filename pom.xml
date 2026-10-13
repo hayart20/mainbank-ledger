@@ -15,10 +15,9 @@
     <version>1.0.0</version>
     <packaging>pom</packaging>
     <name>mainbank-platform</name>
-    <description>MainBank services: ledger, receipts and the shared event contract</description>
+    <description>MainBank services: ledger, receipts, notifications, statements and the API gateway</description>
 
     <modules>
-        <module>ledger-events</module>
         <module>ledger-service</module>
         <module>receipt-service</module>
         <module>notification-service</module>
@@ -38,13 +37,4 @@
         <testcontainers.version>1.21.3</testcontainers.version>
     </properties>
 
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>com.mainbank</groupId>
-                <artifactId>ledger-events</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
 </project>

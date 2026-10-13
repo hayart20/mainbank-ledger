@@ -2,14 +2,13 @@
 #   docker build --build-arg MODULE=ledger-service --build-arg PORT=8080 .
 #   docker build --build-arg MODULE=receipt-service --build-arg PORT=8081 .
 #   (likewise notification-service :8082, statement-service :8083, api-gateway :8080)
-# The module and the shared ledger-events module are built from the repository root.
+# The module is built from the repository root; services share no code, only the Kafka event contract.
 
 # ---- build stage ----
 FROM maven:3.9-eclipse-temurin-25 AS build
 ARG MODULE=ledger-service
 WORKDIR /workspace
 COPY pom.xml .
-COPY ledger-events ./ledger-events
 COPY ledger-service ./ledger-service
 COPY receipt-service ./receipt-service
 COPY notification-service ./notification-service

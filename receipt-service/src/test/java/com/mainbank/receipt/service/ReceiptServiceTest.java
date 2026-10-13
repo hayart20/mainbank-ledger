@@ -1,6 +1,6 @@
 package com.mainbank.receipt.service;
 
-import com.mainbank.ledger.events.TransferCompletedMessage;
+import com.mainbank.receipt.messaging.TransferCompletedMessage;
 import com.mainbank.receipt.config.ReceiptProperties;
 import com.mainbank.receipt.domain.Receipt;
 import com.mainbank.receipt.domain.ReceiptStatus;
@@ -44,8 +44,8 @@ class ReceiptServiceTest {
 
     private ReceiptService service;
     private final UUID id = UUID.randomUUID();
-    private final TransferCompletedMessage message = new TransferCompletedMessage(1, id, "TRANSFER", WHEN,
-            UUID.randomUUID(), "AM11", "Anna", UUID.randomUUID(), "AM22", "Bob", new BigDecimal("12.34"), "AMD");
+    private final TransferCompletedMessage message = new TransferCompletedMessage(id, "TRANSFER", WHEN,
+            "AM11", "Anna", "AM22", "Bob", new BigDecimal("12.34"), "AMD");
 
     @BeforeEach
     void setUp() {

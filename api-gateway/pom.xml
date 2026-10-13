@@ -38,6 +38,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- one Swagger UI for the whole system: it lists the OpenAPI specs of the services behind this gateway -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
+            <version>${springdoc.version}</version>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

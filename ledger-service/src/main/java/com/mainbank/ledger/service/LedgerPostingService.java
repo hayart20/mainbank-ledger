@@ -9,7 +9,7 @@ import com.mainbank.ledger.domain.entity.Account;
 import com.mainbank.ledger.domain.entity.LedgerEntry;
 import com.mainbank.ledger.domain.entity.Transfer;
 import com.mainbank.ledger.domain.exception.DomainException;
-import com.mainbank.ledger.events.TransferCompletedMessage;
+import com.mainbank.ledger.messaging.TransferCompletedMessage;
 import com.mainbank.ledger.messaging.TransferEventProducer;
 import com.mainbank.ledger.repository.AccountRepository;
 import com.mainbank.ledger.repository.LedgerEntryRepository;

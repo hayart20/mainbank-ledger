@@ -9,7 +9,7 @@ import com.mainbank.ledger.domain.entity.Account;
 import com.mainbank.ledger.domain.entity.LedgerEntry;
 import com.mainbank.ledger.domain.entity.Transfer;
 import com.mainbank.ledger.domain.exception.DomainException;
-import com.mainbank.ledger.events.TransferCompletedMessage;
+import com.mainbank.ledger.messaging.TransferCompletedMessage;
 import com.mainbank.ledger.messaging.TransferEventProducer;
 import com.mainbank.ledger.repository.AccountRepository;
 import com.mainbank.ledger.repository.LedgerEntryRepository;
@@ -249,7 +249,6 @@ class LedgerPostingServiceTest {
         ArgumentCaptor<TransferCompletedMessage> published = ArgumentCaptor.forClass(TransferCompletedMessage.class);
         verify(events).record(published.capture());
         TransferCompletedMessage m = published.getValue();
-        assertThat(m.hasDetails()).isTrue();
         assertThat(m.schemaVersion()).isEqualTo(TransferCompletedMessage.SCHEMA_VERSION);
         assertThat(m.transferId()).isEqualTo(t.getId());
         assertThat(m.type()).isEqualTo("OPENING_DEPOSIT");

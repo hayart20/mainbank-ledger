@@ -1,6 +1,6 @@
 package com.mainbank.notification.service;
 
-import com.mainbank.ledger.events.TransferCompletedMessage;
+import com.mainbank.notification.messaging.TransferCompletedMessage;
 import com.mainbank.notification.repository.NotificationLog;
 import org.springframework.stereotype.Service;
 

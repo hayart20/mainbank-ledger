@@ -1,6 +1,6 @@
 package com.mainbank.receipt.service;
 
-import com.mainbank.ledger.events.TransferCompletedMessage;
+import com.mainbank.receipt.messaging.TransferCompletedMessage;
 import com.mainbank.receipt.domain.Receipt;
 
 import java.math.BigDecimal;

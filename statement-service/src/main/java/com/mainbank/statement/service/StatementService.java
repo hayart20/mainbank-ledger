@@ -1,6 +1,6 @@
 package com.mainbank.statement.service;
 
-import com.mainbank.ledger.events.TransferCompletedMessage;
+import com.mainbank.statement.messaging.TransferCompletedMessage;
 import com.mainbank.statement.dto.StatementResponse;
 import com.mainbank.statement.repository.StatementRepository;
 import org.springframework.stereotype.Service;

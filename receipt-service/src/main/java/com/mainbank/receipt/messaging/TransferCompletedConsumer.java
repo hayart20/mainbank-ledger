@@ -2,7 +2,6 @@ package com.mainbank.receipt.messaging;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mainbank.ledger.events.TransferCompletedMessage;
 import com.mainbank.receipt.service.ReceiptService;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;

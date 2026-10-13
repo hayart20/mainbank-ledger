@@ -26,6 +26,8 @@ spring:
 server:
   port: 8083
   shutdown: graceful
+  # the gateway forwards the public host (X-Forwarded-*): the OpenAPI "servers" entry and redirects use it
+  forward-headers-strategy: framework
 
 management:
   endpoints:

@@ -1,6 +1,6 @@
 package com.mainbank.notification.service;
 
-import com.mainbank.ledger.events.TransferCompletedMessage;
+import com.mainbank.notification.messaging.TransferCompletedMessage;
 import com.mainbank.notification.repository.NotificationLog;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,8 +39,8 @@ class NotificationServiceTest {
     }
 
     private TransferCompletedMessage message(String type) {
-        return new TransferCompletedMessage(1, id, type, Instant.parse("2026-01-02T03:04:05Z"), UUID.randomUUID(),
-                "AM11", "Anna", UUID.randomUUID(), "AM22", "Bob", new BigDecimal("25.50"), "USD");
+        return new TransferCompletedMessage(id, type,
+                "AM11", "Anna", "AM22", "Bob", new BigDecimal("25.50"), "USD");
     }
 
     @Test

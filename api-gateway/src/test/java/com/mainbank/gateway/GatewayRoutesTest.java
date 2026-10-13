@@ -54,6 +54,15 @@ class GatewayRoutesTest {
     }
 
     @Test
+    void openApiSpecsAreRoutedToTheirServiceWithThePrefixStripped() {
+        assertThat(target("/docs/ledger/v3/api-docs")).isEqualTo("http://ledger:8080");
+        assertThat(target("/docs/receipt/v3/api-docs")).isEqualTo("http://receipt:8081");
+        assertThat(target("/docs/statement/v3/api-docs")).isEqualTo("http://statement:8083");
+        // only the spec is exposed, not arbitrary paths under /docs
+        assertThat(target("/docs/ledger/actuator/env")).isEqualTo("none");
+    }
+
+    @Test
     void downstreamCallsHaveBoundedTimeouts() {
         assertThat(httpClient.getConnectTimeout()).isEqualTo(2000);
         assertThat(httpClient.getResponseTimeout()).isEqualTo(java.time.Duration.ofSeconds(30));

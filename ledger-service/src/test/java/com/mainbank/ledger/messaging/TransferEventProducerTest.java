@@ -2,7 +2,6 @@ package com.mainbank.ledger.messaging;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mainbank.ledger.events.TransferCompletedMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -54,5 +53,26 @@ class TransferEventProducerTest {
         assertThat(node.get("sourceIban").asText()).isEqualTo("AM11");
         assertThat(node.get("targetOwner").asText()).isEqualTo("Bob");
         assertThat(json.readValue(event.getPayload(), TransferCompletedMessage.class)).isEqualTo(message);
+    }
+
+    /**
+     * The published contract of ledger.transfer.completed. Consumers (in other repositories or modules) read these
+     * exact names: adding a field is fine, renaming or removing one breaks them, so this test must fail first.
+     */
+    @Test
+    void publishedFieldNamesAreTheDocumentedContract() throws Exception {
+        producer.record(message);
+
+        ArgumentCaptor<OutboxEvent> saved = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outbox).save(saved.capture());
+        JsonNode node = json.readTree(saved.getValue().getPayload());
+
+        var names = new java.util.ArrayList<String>();
+        node.fieldNames().forEachRemaining(names::add);
+        assertThat(names).containsExactlyInAnyOrder("schemaVersion", "transferId", "type", "createdAt",
+                "sourceAccountId", "sourceIban", "sourceOwner", "targetAccountId", "targetIban", "targetOwner",
+                "amount", "currency");
+        assertThat(node.get("createdAt").asText()).isEqualTo("2026-01-02T03:04:05.123Z"); // ISO-8601, not an epoch number
+        assertThat(node.get("amount").decimalValue()).isEqualByComparingTo("12.30");
     }
 }

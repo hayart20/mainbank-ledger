@@ -5,7 +5,7 @@ spring:
     gateway:
       server:
         webflux:
-          # a dead or hung service must fail fast (502/504) instead of tying up requests indefinitely
+          # a dead or hung service must fail fast (503/504) instead of tying up requests indefinitely
           httpclient:
             connect-timeout: 2000
             response-timeout: 30s
@@ -27,6 +27,47 @@ spring:
               uri: ${gateway.receipt-url:http://localhost:8081}
               predicates:
                 - Path=/api/v1/receipts/**
+
+            # OpenAPI specs of the services, exposed under /docs/<service>/ for the Swagger UI below
+            # (StripPrefix=2 turns /docs/ledger/v3/api-docs into /v3/api-docs on the service).
+            # PreserveHostHeader keeps the client's Host (localhost:8080): each service builds the spec's "servers"
+            # url from it, so Swagger UI's "Try it out" calls the gateway, not an internal hostname.
+            - id: ledger-openapi
+              uri: ${gateway.ledger-url:http://localhost:8080}
+              predicates:
+                - Path=/docs/ledger/v3/api-docs
+              filters:
+                - StripPrefix=2
+                - PreserveHostHeader
+            - id: receipt-openapi
+              uri: ${gateway.receipt-url:http://localhost:8081}
+              predicates:
+                - Path=/docs/receipt/v3/api-docs
+              filters:
+                - StripPrefix=2
+                - PreserveHostHeader
+            - id: statement-openapi
+              uri: ${gateway.statement-url:http://localhost:8083}
+              predicates:
+                - Path=/docs/statement/v3/api-docs
+              filters:
+                - StripPrefix=2
+                - PreserveHostHeader
+
+# One Swagger UI for the system: http://localhost:8080/swagger-ui.html, with a dropdown per service.
+# notification-service has no HTTP API (it only consumes events), so it has no entry.
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: ledger-service (accounts, transfers)
+        url: /docs/ledger/v3/api-docs
+      - name: receipt-service (receipts)
+        url: /docs/receipt/v3/api-docs
+      - name: statement-service (statements)
+        url: /docs/statement/v3/api-docs
+    # the spec of the gateway itself would be empty: it only routes
+    urls-primary-name: ledger-service (accounts, transfers)
 
 server:
   port: 8080
