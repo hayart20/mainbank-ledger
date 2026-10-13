@@ -10,7 +10,7 @@ spring:
     gateway:
       server:
         webmvc:
-          # a dead or hung service must fail fast (503/504) instead of tying up requests indefinitely
+          # a dead or hung service must fail fast (an error response) instead of tying up requests indefinitely
           http-client:
             connect-timeout: 2s
             read-timeout: 30s
