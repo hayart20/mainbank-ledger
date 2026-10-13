@@ -71,7 +71,9 @@ springdoc:
         url: /docs/receipt/v3/api-docs
       - name: statement-service (statements)
         url: /docs/statement/v3/api-docs
-    # the spec of the gateway itself would be empty: it only routes
+      # the gateway's own spec: the system-status endpoint (everything else is routed to the services)
+      - name: api-gateway (system status)
+        url: /v3/api-docs
     urls-primary-name: ledger-service (accounts, transfers)
 
 server:

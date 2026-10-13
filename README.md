@@ -144,6 +144,7 @@ the gateway, so there is no other Swagger URL to use.
 | GET | `/api/v1/transfers/{id}` | status and ledger legs |
 | GET | `/api/v1/receipts/{transferId}` | **receipt-service.** `?mode=url` (default, 15 min pre-signed URL) or `?mode=stream` (PDF piped); 409 until ready |
 | GET | `/api/v1/accounts/{id}/statement` | **statement-service.** `from` (inclusive) / `to` (exclusive) ISO instants, `page`, `size` (max 200); lines newest first + period totals |
+| GET | `/api/v1/system/status` | **api-gateway.** Health of ledger, receipt, statement and notification, probed in parallel (2 s timeout each). `200` when all are `UP`; `503` when `DEGRADED` or `DOWN`, with the per-service detail in the body |
 
 ```bash
 A=$(curl -s -X POST localhost:8080/api/v1/accounts -H 'Content-Type: application/json' \
@@ -159,6 +160,7 @@ curl -s localhost:8080/api/v1/transfers/<id>                    # ledger legs (t
 curl -s localhost:8080/api/v1/receipts/<id>                      # {"url": "...", "expiresAt": "...", "sha256": "..."}
 curl -s -o receipt.pdf "localhost:8080/api/v1/receipts/<id>?mode=stream"
 curl -s "localhost:8080/api/v1/accounts/$A/statement?size=20"    # account activity + debit/credit totals
+curl -s localhost:8080/api/v1/system/status                      # UP / DEGRADED / DOWN, per service, with probe times
 ```
 
 (`uuidgen` is available on macOS and Linux; on Windows PowerShell use `[guid]::NewGuid()` for the idempotency
@@ -251,6 +253,7 @@ receipt-service: @KafkaListener → INSERT receipts ON CONFLICT DO NOTHING → P
   has no business logic and no error translation of its own. Timeouts are bounded (connect 2 s, read 30 s), so a
   stopped service fails in about 2 s and a hung one after 30 s; the client then gets Spring's generic `500` for
   that route while every other route keeps working.
+* **System status uses virtual threads on purpose.** `GET /api/v1/system/status` probes the four services' health  endpoints with one virtual thread per probe (`Executors.newVirtualThreadPerTaskExecutor()`), so the check takes as  long as the slowest service (bounded by the 2 s timeout) instead of the sum: with three services hung it answers in  about 2 s, not 6 s. That is the case virtual threads are for, blocking I/O that can run side by side; they are not  used on the money path, where row locks and the connection pool, not thread count, set the limit.
 * **Bucket is private**; downloads only via pre-signed URLs signed for `MINIO_PUBLIC_ENDPOINT` (the host is part
   of the SigV4 signature, so it must be the address the client uses, not the in-network `minio:9000`).
   The task's compose snippet sets `mc anonymous set download`, which would expose every receipt – deliberately omitted.

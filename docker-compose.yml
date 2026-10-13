@@ -229,6 +229,8 @@ services:
       GATEWAY_LEDGER_URL: http://app:8080
       GATEWAY_RECEIPT_URL: http://receipt-service:8081
       GATEWAY_STATEMENT_URL: http://statement-service:8083
+      # no route (the notification service has no API), only used by GET /api/v1/system/status
+      GATEWAY_NOTIFICATION_URL: http://notification-service:8082
     depends_on:
       app:
         condition: service_healthy
