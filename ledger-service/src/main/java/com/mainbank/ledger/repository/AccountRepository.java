@@ -14,7 +14,7 @@ public interface AccountRepository extends JpaRepository<AccountEntity, UUID> {
 
     /** {@code SELECT ... FOR UPDATE}. Must be called inside a transaction, in ascending id order. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select a from Account a where a.id = :id")
+    @Query("select a from AccountEntity a where a.id = :id")
     Optional<AccountEntity> findByIdForUpdate(@Param("id") UUID id);
 
     /** Next value of the sequence that feeds the account-number part of the IBAN. */
