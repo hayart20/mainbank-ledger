@@ -1,14 +1,19 @@
 spring:
   application:
     name: api-gateway
+  threads:
+    virtual:
+      # the gateway is servlet based (Tomcat + Spring MVC): a proxied call blocks its thread, so use virtual threads
+      # and a slow service costs a cheap parked thread instead of one of a small fixed pool
+      enabled: true
   cloud:
     gateway:
       server:
-        webflux:
+        webmvc:
           # a dead or hung service must fail fast (503/504) instead of tying up requests indefinitely
-          httpclient:
-            connect-timeout: 2000
-            response-timeout: 30s
+          http-client:
+            connect-timeout: 2s
+            read-timeout: 30s
           # first matching route wins: the more specific statement route must come before the generic accounts route
           routes:
             - id: statement-service
@@ -30,7 +35,7 @@ spring:
 
             # OpenAPI specs of the services, exposed under /docs/<service>/ for the Swagger UI below
             # (StripPrefix=2 turns /docs/ledger/v3/api-docs into /v3/api-docs on the service).
-            # PreserveHostHeader keeps the client's Host (localhost:8080): each service builds the spec's "servers"
+            # PreserveHost keeps the client's Host (localhost:8080): each service builds the spec's "servers"
             # url from it, so Swagger UI's "Try it out" calls the gateway, not an internal hostname.
             - id: ledger-openapi
               uri: ${gateway.ledger-url:http://localhost:8080}
@@ -38,21 +43,21 @@ spring:
                 - Path=/docs/ledger/v3/api-docs
               filters:
                 - StripPrefix=2
-                - PreserveHostHeader
+                - PreserveHost
             - id: receipt-openapi
               uri: ${gateway.receipt-url:http://localhost:8081}
               predicates:
                 - Path=/docs/receipt/v3/api-docs
               filters:
                 - StripPrefix=2
-                - PreserveHostHeader
+                - PreserveHost
             - id: statement-openapi
               uri: ${gateway.statement-url:http://localhost:8083}
               predicates:
                 - Path=/docs/statement/v3/api-docs
               filters:
                 - StripPrefix=2
-                - PreserveHostHeader
+                - PreserveHost
 
 # One Swagger UI for the system: http://localhost:8080/swagger-ui.html, with a dropdown per service.
 # notification-service has no HTTP API (it only consumes events), so it has no entry.
@@ -77,5 +82,5 @@ management:
   endpoints:
     web:
       exposure:
-        # not "gateway": it would publish the internal route table on the public port
+        # only health and info are public on this port
         include: health,info

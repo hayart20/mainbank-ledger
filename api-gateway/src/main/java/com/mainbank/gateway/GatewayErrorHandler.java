@@ -1,32 +1,38 @@
 package com.mainbank.gateway;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.annotation.Order;
-import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.Ordered;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
-import org.springframework.boot.web.reactive.error.ErrorWebExceptionHandler;
-import org.springframework.web.server.ServerWebExchange;
-import reactor.core.publisher.Mono;
+import org.springframework.web.servlet.HandlerExceptionResolver;
+import org.springframework.web.servlet.ModelAndView;
 
+import java.io.IOException;
 import java.net.ConnectException;
+import java.net.NoRouteToHostException;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
-import java.nio.charset.StandardCharsets;
+import java.net.http.HttpConnectTimeoutException;
+import java.net.http.HttpTimeoutException;
+import java.nio.channels.UnresolvedAddressException;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
 /**
- * Turns "the service behind this route is not reachable" into a proper 503 (or 504 for a timeout) with the same
- * {@code application/problem+json} shape and stable {@code code} the services use, instead of a generic 500 that
- * looks like a gateway bug. Anything else is left to the default handler.
+ * Turns "the service behind this route cannot be reached" into a proper 503, and "it did not answer in time" into a
+ * 504, with the same {@code application/problem+json} shape and stable {@code code} the services use, instead of a
+ * generic 500 that looks like a gateway bug.
+ * <p>
+ * It is a {@link HandlerExceptionResolver} rather than a {@code @ExceptionHandler}: for any other error it returns
+ * {@code null}, so Spring's own handling (a 404 for an unknown path, validation errors, real bugs) applies untouched.
  */
 @Component
-@Order(-2) // before Spring Boot's default error handler (-1)
-class GatewayErrorHandler implements ErrorWebExceptionHandler {
+class GatewayErrorHandler implements HandlerExceptionResolver, Ordered {
 
     private static final Logger log = LoggerFactory.getLogger(GatewayErrorHandler.class);
 
@@ -37,54 +43,61 @@ class GatewayErrorHandler implements ErrorWebExceptionHandler {
     }
 
     @Override
-    public Mono<Void> handle(ServerWebExchange exchange, Throwable error) {
-        HttpStatus status = statusFor(error);
-        if (status == null || exchange.getResponse().isCommitted()) {
-            return Mono.error(error);
-        }
-        String code = status == HttpStatus.GATEWAY_TIMEOUT ? "UPSTREAM_TIMEOUT" : "SERVICE_UNAVAILABLE";
-        log.warn("{} for {} {}: {}", status.value(), exchange.getRequest().getMethod(), exchange.getRequest().getPath(),
-                error.toString());
-
-        var response = exchange.getResponse();
-        response.setStatusCode(status);
-        response.getHeaders().setContentType(MediaType.APPLICATION_PROBLEM_JSON);
-        if (status == HttpStatus.SERVICE_UNAVAILABLE) {
-            response.getHeaders().set("Retry-After", "1");
-        }
-        byte[] body = body(status, code);
-        DataBuffer buffer = response.bufferFactory().wrap(body);
-        return response.writeWith(Mono.just(buffer));
+    public int getOrder() {
+        return Ordered.HIGHEST_PRECEDENCE;
     }
 
-    /** @return the status to answer with, or null when this handler is not responsible for the error */
-    static HttpStatus statusFor(Throwable error) {
-        for (Throwable t = error; t != null; t = t.getCause() == t ? null : t.getCause()) {
-            String type = t.getClass().getName();
-            if (t instanceof TimeoutException || type.endsWith("ReadTimeoutException")
-                    || type.endsWith("ConnectTimeoutException")) {
-                return HttpStatus.GATEWAY_TIMEOUT;
-            }
-            if (t instanceof UnknownHostException || t instanceof ConnectException) {
-                return HttpStatus.SERVICE_UNAVAILABLE;
-            }
+    @Override
+    public ModelAndView resolveException(HttpServletRequest request, HttpServletResponse response,
+                                         Object handler, Exception ex) {
+        HttpStatus status = statusFor(ex);
+        if (status == null || response.isCommitted()) {
+            return null;
         }
-        return null;
-    }
+        boolean timeout = status == HttpStatus.GATEWAY_TIMEOUT;
+        String code = timeout ? "UPSTREAM_TIMEOUT" : "SERVICE_UNAVAILABLE";
+        log.warn("{} for {} {}: {}", status.value(), request.getMethod(), request.getRequestURI(), ex.toString());
 
-    private byte[] body(HttpStatus status, String code) {
         Map<String, Object> problem = Map.of(
                 "type", "about:blank",
                 "title", status.getReasonPhrase(),
                 "status", status.value(),
-                "detail", status == HttpStatus.GATEWAY_TIMEOUT
-                        ? "The service did not answer in time"
-                        : "The service is temporarily unavailable, please retry",
+                "detail", timeout ? "The service did not answer in time" : "The service is temporarily unavailable, please retry",
                 "code", code);
         try {
-            return json.writeValueAsBytes(problem);
-        } catch (JsonProcessingException e) {
-            return ("{\"status\":" + status.value() + ",\"code\":\"" + code + "\"}").getBytes(StandardCharsets.UTF_8);
+            // bytes, not getWriter(): the writer would stamp a legacy default charset on the JSON content type
+            byte[] body = json.writeValueAsBytes(problem);
+            response.setStatus(status.value());
+            response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+            response.setContentLength(body.length);
+            if (!timeout) {
+                response.setHeader("Retry-After", "1");
+            }
+            response.getOutputStream().write(body);
+        } catch (IOException writeFailure) {
+            log.warn("Could not write the {} response: {}", status.value(), writeFailure.toString());
         }
+        return new ModelAndView(); // handled: an empty view tells the dispatcher not to render anything
+    }
+
+    /**
+     * @return 503 when the service could not be reached, 504 when it was reached but did not answer in time,
+     *         or null when this handler is not responsible for the error
+     */
+    static HttpStatus statusFor(Throwable error) {
+        for (Throwable t = error; t != null; t = t.getCause() == t ? null : t.getCause()) {
+            // Order matters: the JDK reports a failed connect (nothing listening, name not resolvable) as a
+            // *connect timeout*, which is "unreachable" (503), not "slow" (504); and HttpConnectTimeoutException
+            // is a subclass of HttpTimeoutException.
+            if (t instanceof HttpConnectTimeoutException || t instanceof UnknownHostException
+                    || t instanceof ConnectException || t instanceof NoRouteToHostException
+                    || t instanceof UnresolvedAddressException) {
+                return HttpStatus.SERVICE_UNAVAILABLE;
+            }
+            if (t instanceof HttpTimeoutException || t instanceof SocketTimeoutException || t instanceof TimeoutException) {
+                return HttpStatus.GATEWAY_TIMEOUT;
+            }
+        }
+        return null;
     }
 }

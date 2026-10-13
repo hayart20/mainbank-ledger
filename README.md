@@ -95,7 +95,8 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/w" -v "$H
 | Port 5432, 9000 or 8080 already in use | Stop the local service using it, or change the host side of the mapping in `docker-compose.yml`. |
 | Receipt link opens but MinIO answers 403 | The URL is signed for `MINIO_PUBLIC_ENDPOINT` (`http://localhost:9000`); open it through that exact host and port, and within 15 minutes. |
 | `409 RECEIPT_NOT_READY` right after a transfer | Normal: receipts are produced asynchronously (about a second). Call again. |
-| Gateway answers `503 SERVICE_UNAVAILABLE` | The service behind the route is down or still starting; check `docker compose ps`. |
+| Gateway answers `503 SERVICE_UNAVAILABLE` (with `Retry-After`) | The service behind the route is down or still starting; check `docker compose ps`. |
+| Gateway answers `504 UPSTREAM_TIMEOUT` | The service accepted the request but did not answer within 30 s (read timeout); check its logs. |
 
 ## API
 
@@ -243,6 +244,14 @@ receipt-service: @KafkaListener → INSERT receipts ON CONFLICT DO NOTHING → P
 * **Hashes:** `receipts.details_sha256` = SHA-256 of the canonical transaction string, printed in the PDF
   (re-computable from the ledger). `receipts.pdf_sha256` = digest of the stored file; the details hash is also S3
   object metadata. Object key is deterministic (`receipts/{transferId}.pdf`) and never rewritten once `READY`.
+* **The gateway is a plain servlet application, not a reactive one.** Only the edge proxies requests; the business
+  services are Spring MVC with blocking JDBC, so a second programming model (Reactor `Mono`/`Flux`, WebFlux) would
+  buy nothing here and cost a different mental model and error handling. The gateway therefore uses *Spring Cloud
+  Gateway Server MVC* on Tomcat with **virtual threads** (`spring.threads.virtual.enabled`): a proxied call blocks
+  a cheap virtual thread instead of a pool thread. Failures are mapped by one small `HandlerExceptionResolver`:
+  an unreachable service (not listening, unknown host, connect failure) is **503** + `Retry-After`, a service that
+  accepted the request but did not answer within the 30 s read timeout is **504**; everything else keeps Spring's
+  normal handling. Connect timeout is 2 s, so a stopped service fails in about 2 s.
 * **Bucket is private**; downloads only via pre-signed URLs signed for `MINIO_PUBLIC_ENDPOINT` (the host is part
   of the SigV4 signature, so it must be the address the client uses, not the in-network `minio:9000`).
   The task's compose snippet sets `mc anonymous set download`, which would expose every receipt – deliberately omitted.
@@ -252,7 +261,8 @@ receipt-service: @KafkaListener → INSERT receipts ON CONFLICT DO NOTHING → P
 **Security and operations**
 * **No authentication or authorization anywhere.** Any client can read any account's statement or receipt, and the
   Swagger UI and specs are open. Authentication belongs at the gateway.
-* No rate limiting. A single configurable per-transfer ceiling stands in for per-customer CBA limits.
+* No rate limiting (the gateway supports a Bucket4j `rateLimit` filter; not enabled). A single configurable
+  per-transfer ceiling stands in for per-customer CBA limits.
 * All services connect to Postgres as the same user (`asb_app`) and could read each other's schemas. One user per
   service, limited to its own schema, is the proper boundary.
 * Compose credentials are development defaults committed in `docker-compose.yml` and `application.yml`.
@@ -331,7 +341,7 @@ receipt-service/         the receipt microservice: Kafka consumer, PDF, MinIO, r
   src/main/resources/db/migration/   V1 receipts table, V2 one-off import from the ledger
 notification-service/    consumer: com/mainbank/notification  (NotificationService, NotificationSender, NotificationLog)
 statement-service/       consumer: com/mainbank/statement      (StatementService, StatementRepository, StatementController)
-api-gateway/             Spring Cloud Gateway: routes only (application.yml), no business code
+api-gateway/             Spring Cloud Gateway Server MVC (servlet, virtual threads): routes in application.yml, 503/504 mapping, no business code
 ```
 
 Build everything with `mvn verify` from the repository root. One root `Dockerfile` builds any service image:
