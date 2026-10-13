@@ -27,7 +27,7 @@ import java.util.concurrent.Future;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** HTTP contract of {@code /api/v1/accounts}: status codes, headers, validation errors and ledger side effects. */
-class AccountControllerIT extends AbstractIntegrationTest {
+class AccountEntityControllerIT extends AbstractIntegrationTest {
 
     @Autowired TestRestTemplate rest;
     @Autowired JdbcTemplate jdbc;

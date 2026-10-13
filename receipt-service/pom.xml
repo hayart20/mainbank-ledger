@@ -11,7 +11,7 @@
 
     <artifactId>receipt-service</artifactId>
     <name>receipt-service</name>
-    <description>Kafka consumer: builds the transfer receipt PDF, stores it in MinIO and serves it</description>
+    <description>Kafka consumer: builds the transferEntity receipt PDF, stores it in MinIO and serves it</description>
 
     <dependencies>
         <dependency>

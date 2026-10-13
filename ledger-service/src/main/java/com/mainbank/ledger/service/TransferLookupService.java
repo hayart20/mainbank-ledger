@@ -1,7 +1,7 @@
 package com.mainbank.ledger.service;
 
 import com.mainbank.ledger.domain.constant.ErrorCode;
-import com.mainbank.ledger.domain.entity.Transfer;
+import com.mainbank.ledger.domain.entity.TransferEntity;
 import com.mainbank.ledger.domain.exception.DomainException;
 import com.mainbank.ledger.dto.TransferResponse;
 import com.mainbank.ledger.repository.LedgerEntryRepository;
@@ -24,7 +24,7 @@ public class TransferLookupService {
 
     @Transactional(readOnly = true)
     public TransferResponse get(UUID id) {
-        Transfer t = transfers.findById(id)
+        TransferEntity t = transfers.findById(id)
                 .orElseThrow(() -> new DomainException(ErrorCode.TRANSFER_NOT_FOUND, "Transfer " + id + " not found"));
         return TransferResponse.from(t, ledger.findByTransferIdOrderByIdAsc(id));
     }

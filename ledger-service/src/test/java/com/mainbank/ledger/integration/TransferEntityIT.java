@@ -1,6 +1,6 @@
 package com.mainbank.ledger.integration;
 
-import com.mainbank.ledger.domain.entity.LedgerEntry;
+import com.mainbank.ledger.domain.entity.LedgerEntryEntity;
 import com.mainbank.ledger.repository.LedgerEntryRepository;
 import com.mainbank.ledger.dto.AccountResponse;
 import com.mainbank.ledger.dto.TransferResponse;
@@ -33,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
-class TransferIT extends AbstractIntegrationTest {
+class TransferEntityIT extends AbstractIntegrationTest {
 
     @Autowired TestRestTemplate rest;
     @Autowired JdbcTemplate jdbc;
@@ -316,7 +316,7 @@ class TransferIT extends AbstractIntegrationTest {
     @Test
     void ledgerRowsAreImmutable() {
         AccountResponse a = account("10.00");
-        LedgerEntry entry = ledgerEntries.findAll().stream()
+        LedgerEntryEntity entry = ledgerEntries.findAll().stream()
                 .filter(e -> e.getAccountId().equals(a.id())).findFirst().orElseThrow();
 
         assertThatThrownBy(() -> ledgerEntries.delete(entry))
@@ -324,7 +324,7 @@ class TransferIT extends AbstractIntegrationTest {
 
         // columns are updatable=false: in-memory edits are never flushed to the database
         tx.executeWithoutResult(s -> {
-            LedgerEntry managed = ledgerEntries.findById(entry.getId()).orElseThrow();
+            LedgerEntryEntity managed = ledgerEntries.findById(entry.getId()).orElseThrow();
             ReflectionTestUtils.setField(managed, "amount", new BigDecimal("999.00"));
         });
 

@@ -13,7 +13,8 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "transfers")
-public class Transfer {
+public class TransferEntity
+{
 
     @Id
     private UUID id;
@@ -45,7 +46,7 @@ public class Transfer {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    protected Transfer() { }
+    protected TransferEntity() { }
 
     public UUID getId() { return id; }
 
@@ -82,9 +83,9 @@ public class Transfer {
      * @param amount         positive amount scaled to 2 decimals
      * @param currency       currency shared by both accounts
      */
-    public static Transfer completed(UUID idempotencyKey, TransferType type, UUID source, UUID target,
-                                     BigDecimal amount, Currency currency) {
-        Transfer t = new Transfer();
+    public static TransferEntity completed(UUID idempotencyKey, TransferType type, UUID source, UUID target,
+                                           BigDecimal amount, Currency currency) {
+        TransferEntity t = new TransferEntity();
         t.id = UUID.randomUUID();
         t.idempotencyKey = idempotencyKey;
         t.type = type;

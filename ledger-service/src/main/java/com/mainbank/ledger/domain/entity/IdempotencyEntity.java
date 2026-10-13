@@ -6,7 +6,8 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "idempotency_keys")
-public class IdempotencyRecord {
+public class IdempotencyEntity
+{
 
     @Id
     @Column(name = "idempotency_key")
@@ -24,7 +25,7 @@ public class IdempotencyRecord {
     @Column(name = "response_body")
     private String responseBody;
 
-    protected IdempotencyRecord() { }
+    protected IdempotencyEntity() { }
 
     public UUID getKey() { return key; }
 

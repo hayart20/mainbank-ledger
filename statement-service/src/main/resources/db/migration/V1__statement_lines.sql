@@ -1,5 +1,5 @@
 -- Owned by the statement service: lives in its own schema (see spring.datasource.url currentSchema).
--- A read model built from transfer-completed events: one row per account touched by a transfer.
+-- A read model built from transferEntity-completed events: one row per accountEntity touched by a transferEntity.
 CREATE TABLE statement_lines (
     transfer_id             UUID           NOT NULL,
     account_id              UUID           NOT NULL,

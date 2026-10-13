@@ -2,8 +2,8 @@ package com.mainbank.ledger.dto;
 
 import com.mainbank.ledger.domain.constant.Currency;
 import com.mainbank.ledger.domain.constant.EntryType;
-import com.mainbank.ledger.domain.entity.LedgerEntry;
-import com.mainbank.ledger.domain.entity.Transfer;
+import com.mainbank.ledger.domain.entity.LedgerEntryEntity;
+import com.mainbank.ledger.domain.entity.TransferEntity;
 import com.mainbank.ledger.domain.constant.TransferStatus;
 import com.mainbank.ledger.domain.constant.TransferType;
 
@@ -17,12 +17,12 @@ public record TransferResponse(UUID id, TransferType type, TransferStatus status
                                List<Leg> ledgerEntries) {
 
     public record Leg(Long id, UUID accountId, EntryType entryType, BigDecimal amount, Instant createdAt) {
-        static Leg from(LedgerEntry e) {
+        static Leg from(LedgerEntryEntity e) {
             return new Leg(e.getId(), e.getAccountId(), e.getEntryType(), e.getAmount(), e.getCreatedAt());
         }
     }
 
-    public static TransferResponse from(Transfer t, List<LedgerEntry> entries) {
+    public static TransferResponse from(TransferEntity t, List<LedgerEntryEntity> entries) {
         return new TransferResponse(t.getId(), t.getType(), t.getStatus(), t.getSourceAccountId(),
                 t.getTargetAccountId(), t.getAmount(), t.getCurrency(), t.getCreatedAt(),
                 entries.stream().map(Leg::from).toList());

@@ -5,9 +5,9 @@ import com.mainbank.ledger.domain.constant.Currency;
 import com.mainbank.ledger.domain.constant.EntryType;
 import com.mainbank.ledger.domain.constant.ErrorCode;
 import com.mainbank.ledger.domain.constant.TransferType;
-import com.mainbank.ledger.domain.entity.Account;
-import com.mainbank.ledger.domain.entity.LedgerEntry;
-import com.mainbank.ledger.domain.entity.Transfer;
+import com.mainbank.ledger.domain.entity.AccountEntity;
+import com.mainbank.ledger.domain.entity.LedgerEntryEntity;
+import com.mainbank.ledger.domain.entity.TransferEntity;
 import com.mainbank.ledger.domain.exception.DomainException;
 import com.mainbank.ledger.messaging.TransferCompletedMessage;
 import com.mainbank.ledger.messaging.TransferEventProducer;
@@ -82,7 +82,7 @@ public class LedgerPostingService {
      *   <li><b>Validate the locked accounts:</b> a bank settlement account may not be debited unless
      *       {@code allowSystemSource} is true, and both accounts must be in the transfer currency. Checks run
      *       after locking because they need the current, locked state.</li>
-     *   <li><b>Move the money:</b> {@link Account#debit} and {@link Account#credit} apply the status and overdraft
+     *   <li><b>Move the money:</b> {@link AccountEntity#debit} and {@link AccountEntity#credit} apply the status and overdraft
      *       rules and update the balances in memory.</li>
      *   <li><b>Persist:</b> save the transfer and both ledger entries, then
      *       flush, so database constraints such as {@code balance >= -overdraft_limit} are checked now and not
@@ -106,8 +106,8 @@ public class LedgerPostingService {
      *                         {@code ACCOUNT_NOT_ACTIVE} or {@code INSUFFICIENT_FUNDS}
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    public Transfer post(UUID idempotencyKey, TransferType type, UUID sourceId, UUID targetId, BigDecimal rawAmount,
-                         Currency currency, boolean allowSystemSource) {
+    public TransferEntity post(UUID idempotencyKey, TransferType type, UUID sourceId, UUID targetId, BigDecimal rawAmount,
+                               Currency currency, boolean allowSystemSource) {
         if (sourceId.equals(targetId)) {
             throw new DomainException(ErrorCode.SAME_ACCOUNT, "Source and target accounts must differ");
         }
@@ -121,12 +121,12 @@ public class LedgerPostingService {
         UUID lowerId = sourceHasLowerId ? sourceId : targetId;
         UUID higherId = sourceHasLowerId ? targetId : sourceId;
 
-        Account lowerIdAccount = lock(lowerId);
-        Account higherIdAccount = lock(higherId);
+        AccountEntity lowerIdAccountEntity = lock(lowerId);
+        AccountEntity higherIdAccountEntity = lock(higherId);
 
         // Lock order is by id, not by role, so map the locked rows back to their roles in this transfer.
-        Account source = sourceHasLowerId ? lowerIdAccount : higherIdAccount;
-        Account target = sourceHasLowerId ? higherIdAccount : lowerIdAccount;
+        AccountEntity source = sourceHasLowerId ? lowerIdAccountEntity : higherIdAccountEntity;
+        AccountEntity target = sourceHasLowerId ? higherIdAccountEntity : lowerIdAccountEntity;
 
         if (!allowSystemSource && source.isSystemAccount()) {
             throw new DomainException(ErrorCode.SYSTEM_ACCOUNT_NOT_ALLOWED, "Bank settlement accounts cannot be debited via the API");
@@ -139,16 +139,17 @@ public class LedgerPostingService {
         source.debit(amount);
         target.credit(amount);
 
-        Transfer transfer = transfers.save(Transfer.completed(idempotencyKey, type, sourceId, targetId, amount, currency));
+        TransferEntity transferEntity = transfers.save(
+                TransferEntity.completed(idempotencyKey, type, sourceId, targetId, amount, currency));
         ledger.saveAll(List.of(
-                new LedgerEntry(transfer.getId(), sourceId, EntryType.DEBIT, amount),
-                new LedgerEntry(transfer.getId(), targetId, EntryType.CREDIT, amount)));
+                new LedgerEntryEntity(transferEntity.getId(), sourceId, EntryType.DEBIT, amount),
+                new LedgerEntryEntity(transferEntity.getId(), targetId, EntryType.CREDIT, amount)));
         accounts.flush();
         // Every posting is announced through the outbox (same transaction), with everything consumers need.
-        events.record(new TransferCompletedMessage(TransferCompletedMessage.SCHEMA_VERSION, transfer.getId(),
-                type.name(), transfer.getCreatedAt(), source.getId(), source.getIban(), source.getOwnerName(),
+        events.record(new TransferCompletedMessage(TransferCompletedMessage.SCHEMA_VERSION, transferEntity.getId(),
+                type.name(), transferEntity.getCreatedAt(), source.getId(), source.getIban(), source.getOwnerName(),
                 target.getId(), target.getIban(), target.getOwnerName(), amount, currency.name()));
-        return transfer;
+        return transferEntity;
     }
 
     /**
@@ -157,12 +158,12 @@ public class LedgerPostingService {
      * any other money movement.
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    public Transfer openingDeposit(Account target, BigDecimal amount) {
+    public TransferEntity openingDeposit(AccountEntity target, BigDecimal amount) {
         return post(UUID.randomUUID(), TransferType.OPENING_DEPOSIT,
                 SystemAccounts.settlementFor(target.getCurrency()), target.getId(), amount, target.getCurrency(), true);
     }
 
-    private Account lock(UUID id) {
+    private AccountEntity lock(UUID id) {
         return accounts.findByIdForUpdate(id)
                 .orElseThrow(() -> new DomainException(ErrorCode.ACCOUNT_NOT_FOUND, "Account " + id + " not found"));
     }

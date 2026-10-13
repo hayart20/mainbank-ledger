@@ -5,9 +5,9 @@ import com.mainbank.ledger.domain.constant.Currency;
 import com.mainbank.ledger.domain.constant.EntryType;
 import com.mainbank.ledger.domain.constant.ErrorCode;
 import com.mainbank.ledger.domain.constant.TransferType;
-import com.mainbank.ledger.domain.entity.Account;
-import com.mainbank.ledger.domain.entity.LedgerEntry;
-import com.mainbank.ledger.domain.entity.Transfer;
+import com.mainbank.ledger.domain.entity.AccountEntity;
+import com.mainbank.ledger.domain.entity.LedgerEntryEntity;
+import com.mainbank.ledger.domain.entity.TransferEntity;
 import com.mainbank.ledger.domain.exception.DomainException;
 import com.mainbank.ledger.messaging.TransferCompletedMessage;
 import com.mainbank.ledger.messaging.TransferEventProducer;
@@ -66,21 +66,21 @@ class LedgerPostingServiceTest {
         service = new LedgerPostingService(accounts, transfers, ledger, events, em, props);
     }
 
-    private static Account account(UUID id, Currency currency, String balance, String overdraft) {
-        Account a = Account.open("AM" + id.toString().substring(0, 8), "Owner " + id.toString().charAt(0), currency,
+    private static AccountEntity account(UUID id, Currency currency, String balance, String overdraft) {
+        AccountEntity a = AccountEntity.open("AM" + id.toString().substring(0, 8), "Owner " + id.toString().charAt(0), currency,
                 new BigDecimal(overdraft));
         ReflectionTestUtils.setField(a, "id", id);
         ReflectionTestUtils.setField(a, "balance", new BigDecimal(balance));
         return a;
     }
 
-    private void givenLocked(Account... locked) {
-        for (Account a : locked) {
+    private void givenLocked(AccountEntity... locked) {
+        for (AccountEntity a : locked) {
             when(accounts.findByIdForUpdate(a.getId())).thenReturn(Optional.of(a));
         }
     }
 
-    private Transfer post(UUID source, UUID target, String amount, Currency currency, boolean allowSystemSource) {
+    private TransferEntity post(UUID source, UUID target, String amount, Currency currency, boolean allowSystemSource) {
         return service.post(UUID.randomUUID(), TransferType.TRANSFER, source, target, new BigDecimal(amount), currency, allowSystemSource);
     }
 
@@ -106,8 +106,8 @@ class LedgerPostingServiceTest {
     @ParameterizedTest(name = "source has lower id = {0}")
     @ValueSource(booleans = {true, false})
     void accountsAreAlwaysLockedInAscendingIdOrder(boolean sourceHasLowerId) {
-        Account low = account(LOW, Currency.AMD, "100.00", "0");
-        Account high = account(HIGH, Currency.AMD, "100.00", "0");
+        AccountEntity low = account(LOW, Currency.AMD, "100.00", "0");
+        AccountEntity high = account(HIGH, Currency.AMD, "100.00", "0");
         givenLocked(low, high);
         when(transfers.save(any())).thenAnswer(i -> i.getArgument(0));
 
@@ -122,13 +122,13 @@ class LedgerPostingServiceTest {
     @ParameterizedTest(name = "source has lower id = {0}")
     @ValueSource(booleans = {true, false})
     void lockedRowsAreMappedBackToTheirRolesWhateverTheLockOrder(boolean sourceHasLowerId) {
-        Account low = account(LOW, Currency.AMD, "100.00", "0");
-        Account high = account(HIGH, Currency.AMD, "100.00", "0");
+        AccountEntity low = account(LOW, Currency.AMD, "100.00", "0");
+        AccountEntity high = account(HIGH, Currency.AMD, "100.00", "0");
         givenLocked(low, high);
         when(transfers.save(any())).thenAnswer(i -> i.getArgument(0));
 
-        Account source = sourceHasLowerId ? low : high;
-        Account target = sourceHasLowerId ? high : low;
+        AccountEntity source = sourceHasLowerId ? low : high;
+        AccountEntity target = sourceHasLowerId ? high : low;
         post(source.getId(), target.getId(), "30.00", Currency.AMD, false);
 
         assertThat(source.getBalance()).isEqualByComparingTo("70.00");
@@ -139,13 +139,14 @@ class LedgerPostingServiceTest {
 
     @Test
     void postWritesCompletedTransferWithBalancedDebitAndCreditLegs() {
-        Account source = account(LOW, Currency.AMD, "100.00", "0");
-        Account target = account(HIGH, Currency.AMD, "0.00", "0");
+        AccountEntity source = account(LOW, Currency.AMD, "100.00", "0");
+        AccountEntity target = account(HIGH, Currency.AMD, "0.00", "0");
         givenLocked(source, target);
         when(transfers.save(any())).thenAnswer(i -> i.getArgument(0));
         UUID key = UUID.randomUUID();
 
-        Transfer t = service.post(key, TransferType.TRANSFER, LOW, HIGH, new BigDecimal("12.3"), Currency.AMD, false);
+        TransferEntity
+                t = service.post(key, TransferType.TRANSFER, LOW, HIGH, new BigDecimal("12.3"), Currency.AMD, false);
 
         assertThat(t.getIdempotencyKey()).isEqualTo(key);
         assertThat(t.getAmount()).isEqualTo(new BigDecimal("12.30")); // normalised to 2 decimals
@@ -153,12 +154,12 @@ class LedgerPostingServiceTest {
         assertThat(t.getTargetAccountId()).isEqualTo(HIGH);
 
         @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<LedgerEntry>> legs = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<List<LedgerEntryEntity>> legs = ArgumentCaptor.forClass(List.class);
         verify(ledger).saveAll(legs.capture());
         assertThat(legs.getValue()).hasSize(2);
-        assertThat(legs.getValue()).extracting(LedgerEntry::getEntryType).containsExactly(EntryType.DEBIT, EntryType.CREDIT);
-        assertThat(legs.getValue()).extracting(LedgerEntry::getAccountId).containsExactly(LOW, HIGH);
-        assertThat(legs.getValue()).extracting(LedgerEntry::getAmount).allSatisfy(a -> assertThat(a).isEqualTo(new BigDecimal("12.30")));
+        assertThat(legs.getValue()).extracting(LedgerEntryEntity::getEntryType).containsExactly(EntryType.DEBIT, EntryType.CREDIT);
+        assertThat(legs.getValue()).extracting(LedgerEntryEntity::getAccountId).containsExactly(LOW, HIGH);
+        assertThat(legs.getValue()).extracting(LedgerEntryEntity::getAmount).allSatisfy(a -> assertThat(a).isEqualTo(new BigDecimal("12.30")));
         // flushed so DB constraints fire inside the transaction, not at commit
         verify(accounts).flush();
     }
@@ -191,9 +192,9 @@ class LedgerPostingServiceTest {
 
     @Test
     void settlementAccountCannotBeDebitedUnlessExplicitlyAllowed() {
-        Account settlement = account(LOW, Currency.AMD, "0.00", "1000000.00");
+        AccountEntity settlement = account(LOW, Currency.AMD, "0.00", "1000000.00");
         ReflectionTestUtils.setField(settlement, "systemAccount", true);
-        Account customer = account(HIGH, Currency.AMD, "0.00", "0");
+        AccountEntity customer = account(HIGH, Currency.AMD, "0.00", "0");
         givenLocked(settlement, customer);
 
         assertThatThrownBy(() -> post(LOW, HIGH, "1.00", Currency.AMD, false))
@@ -204,8 +205,8 @@ class LedgerPostingServiceTest {
 
     @Test
     void currencyMustMatchBothAccounts() {
-        Account amd = account(LOW, Currency.AMD, "100.00", "0");
-        Account usd = account(HIGH, Currency.USD, "100.00", "0");
+        AccountEntity amd = account(LOW, Currency.AMD, "100.00", "0");
+        AccountEntity usd = account(HIGH, Currency.USD, "100.00", "0");
         givenLocked(amd, usd);
 
         assertThatThrownBy(() -> post(LOW, HIGH, "1.00", Currency.AMD, false))
@@ -216,8 +217,8 @@ class LedgerPostingServiceTest {
 
     @Test
     void insufficientFundsLeavesNoTransferAndNoLedgerRows() {
-        Account source = account(LOW, Currency.AMD, "5.00", "0");
-        Account target = account(HIGH, Currency.AMD, "0.00", "0");
+        AccountEntity source = account(LOW, Currency.AMD, "5.00", "0");
+        AccountEntity target = account(HIGH, Currency.AMD, "0.00", "0");
         givenLocked(source, target);
 
         assertThatThrownBy(() -> post(LOW, HIGH, "5.01", Currency.AMD, false))
@@ -233,13 +234,13 @@ class LedgerPostingServiceTest {
     @Test
     void openingDepositDebitsTheSettlementAccountAndRecordsTheCompletedEvent() {
         UUID settlementId = SystemAccounts.settlementFor(Currency.AMD);
-        Account settlement = account(settlementId, Currency.AMD, "0.00", "1000000.00");
+        AccountEntity settlement = account(settlementId, Currency.AMD, "0.00", "1000000.00");
         ReflectionTestUtils.setField(settlement, "systemAccount", true);
-        Account customer = account(HIGH, Currency.AMD, "0.00", "0");
+        AccountEntity customer = account(HIGH, Currency.AMD, "0.00", "0");
         givenLocked(settlement, customer);
         when(transfers.save(any())).thenAnswer(i -> i.getArgument(0));
 
-        Transfer t = service.openingDeposit(customer, new BigDecimal("500.00"));
+        TransferEntity t = service.openingDeposit(customer, new BigDecimal("500.00"));
 
         assertThat(t.getType()).isEqualTo(TransferType.OPENING_DEPOSIT);
         assertThat(t.getSourceAccountId()).isEqualTo(settlementId);

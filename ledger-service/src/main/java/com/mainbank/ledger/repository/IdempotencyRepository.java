@@ -1,6 +1,6 @@
 package com.mainbank.ledger.repository;
 
-import com.mainbank.ledger.domain.entity.IdempotencyRecord;
+import com.mainbank.ledger.domain.entity.IdempotencyEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -8,7 +8,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.UUID;
 
-public interface IdempotencyRepository extends JpaRepository<IdempotencyRecord, UUID> {
+public interface IdempotencyRepository extends JpaRepository<IdempotencyEntity, UUID> {
 
     /**
      * Atomically "claims" an idempotency key for the current transaction: the first request to insert a key owns

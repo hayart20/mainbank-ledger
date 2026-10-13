@@ -11,7 +11,7 @@
 
     <artifactId>statement-service</artifactId>
     <name>statement-service</name>
-    <description>Kafka consumer that keeps a read model of account activity and serves account statements</description>
+    <description>Kafka consumer that keeps a read model of accountEntity activity and serves accountEntity statements</description>
 
     <dependencies>
         <dependency>

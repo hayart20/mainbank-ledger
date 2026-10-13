@@ -3,7 +3,7 @@ package com.mainbank.ledger.service;
 import com.mainbank.ledger.domain.constant.AccountStatus;
 import com.mainbank.ledger.domain.constant.Currency;
 import com.mainbank.ledger.domain.constant.ErrorCode;
-import com.mainbank.ledger.domain.entity.Account;
+import com.mainbank.ledger.domain.entity.AccountEntity;
 import com.mainbank.ledger.domain.exception.DomainException;
 import com.mainbank.ledger.dto.CreateAccountRequest;
 import com.mainbank.ledger.repository.AccountRepository;
@@ -28,7 +28,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class AccountServiceTest {
+class AccountEntityServiceTest
+{
 
     @Mock AccountRepository accounts;
     @Mock LedgerPostingService posting;
@@ -42,14 +43,14 @@ class AccountServiceTest {
 
     private void givenIbanSequence() {
         when(accounts.nextIbanSequence()).thenReturn(1_000_000_042L);
-        when(accounts.saveAndFlush(any(Account.class))).thenAnswer(i -> i.getArgument(0));
+        when(accounts.saveAndFlush(any(AccountEntity.class))).thenAnswer(i -> i.getArgument(0));
     }
 
     @Test
     void createOpensActiveAccountWithZeroBalanceAndGeneratedIban() {
         givenIbanSequence();
 
-        Account a = service.create(new CreateAccountRequest("  Hayk Harutyunyan  ", Currency.USD, null, new BigDecimal("50")));
+        AccountEntity a = service.create(new CreateAccountRequest("  Hayk Harutyunyan  ", Currency.USD, null, new BigDecimal("50")));
 
         assertThat(a.getOwnerName()).isEqualTo("Hayk Harutyunyan"); // trimmed
         assertThat(a.getCurrency()).isEqualTo(Currency.USD);
@@ -74,7 +75,7 @@ class AccountServiceTest {
     void createWithInitialBalanceFundsItThroughALedgerPostingNeverADirectWrite() {
         givenIbanSequence();
 
-        Account a = service.create(new CreateAccountRequest("Hayk", Currency.AMD, new BigDecimal("500.00"), null));
+        AccountEntity a = service.create(new CreateAccountRequest("Hayk", Currency.AMD, new BigDecimal("500.00"), null));
 
         verify(posting).openingDeposit(a, new BigDecimal("500.00"));
         assertThat(a.getBalance()).isEqualByComparingTo("0.00"); // only the (mocked) posting may change it
@@ -88,13 +89,13 @@ class AccountServiceTest {
 
         InOrder order = inOrder(posting, accounts);
         order.verify(posting).applyLockTimeout();
-        order.verify(accounts).saveAndFlush(any(Account.class));
+        order.verify(accounts).saveAndFlush(any(AccountEntity.class));
         order.verify(posting).openingDeposit(any(), any());
     }
 
     @Test
     void getReturnsTheAccount() {
-        Account a = Account.open("AM01", "Hayk", Currency.AMD, BigDecimal.ZERO);
+        AccountEntity a = AccountEntity.open("AM01", "Hayk", Currency.AMD, BigDecimal.ZERO);
         when(accounts.findById(a.getId())).thenReturn(Optional.of(a));
 
         assertThat(service.get(a.getId())).isSameAs(a);

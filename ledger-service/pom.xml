@@ -11,7 +11,7 @@
 
     <artifactId>ledger-service</artifactId>
     <name>ledger-service</name>
-    <description>Accounts, transfers and the double-entry ledger; publishes transfer-completed events</description>
+    <description>Accounts, transfers and the double-entry ledger; publishes transferEntity-completed events</description>
 
     <dependencies>
         <dependency>

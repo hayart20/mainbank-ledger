@@ -11,7 +11,7 @@
 
     <artifactId>notification-service</artifactId>
     <name>notification-service</name>
-    <description>Kafka consumer: tells the account holders about every completed transfer</description>
+    <description>Kafka consumer: tells the accountEntity holders about every completed transferEntity</description>
 
     <dependencies>
         <dependency>

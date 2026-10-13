@@ -20,7 +20,8 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "accounts")
-public class Account {
+public class AccountEntity
+{
 
     @Id
     private UUID id;
@@ -59,7 +60,7 @@ public class Account {
      * and then populates the fields. It is {@code protected} so application code cannot create a half-initialised
      * account; use {@link #open} instead.
      */
-    protected Account() { }
+    protected AccountEntity() { }
 
     public UUID getId() { return id; }
 
@@ -95,8 +96,8 @@ public class Account {
      * @param currency       fixed for the lifetime of the account
      * @param overdraftLimit non-negative amount the balance may go below zero
      */
-    public static Account open(String iban, String ownerName, Currency currency, BigDecimal overdraftLimit) {
-        Account a = new Account();
+    public static AccountEntity open(String iban, String ownerName, Currency currency, BigDecimal overdraftLimit) {
+        AccountEntity a = new AccountEntity();
         a.id = UUID.randomUUID();
         a.iban = iban;
         a.ownerName = ownerName;

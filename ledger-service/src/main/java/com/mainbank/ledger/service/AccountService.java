@@ -3,7 +3,7 @@ package com.mainbank.ledger.service;
 import com.mainbank.ledger.util.Iban;
 
 import com.mainbank.ledger.domain.constant.ErrorCode;
-import com.mainbank.ledger.domain.entity.Account;
+import com.mainbank.ledger.domain.entity.AccountEntity;
 import com.mainbank.ledger.domain.exception.DomainException;
 import com.mainbank.ledger.repository.AccountRepository;
 import com.mainbank.ledger.dto.CreateAccountRequest;
@@ -24,20 +24,20 @@ public class AccountService {
     }
 
     @Transactional
-    public Account create(CreateAccountRequest request) {
+    public AccountEntity create(CreateAccountRequest request) {
         posting.applyLockTimeout();
-        Account account = accounts.saveAndFlush(Account.open(Iban.build(accounts.nextIbanSequence()),
+        AccountEntity accountEntity = accounts.saveAndFlush(AccountEntity.open(Iban.build(accounts.nextIbanSequence()),
                 request.ownerName().trim(), request.currency(), request.overdraftLimitOrZero()));
 
         // No direct balance writes: the opening balance is a real ledger posting against the settlement account.
         if (request.initialBalanceOrZero().signum() > 0) {
-            posting.openingDeposit(account, request.initialBalanceOrZero());
+            posting.openingDeposit(accountEntity, request.initialBalanceOrZero());
         }
-        return account;
+        return accountEntity;
     }
 
     @Transactional(readOnly = true)
-    public Account get(UUID id) {
+    public AccountEntity get(UUID id) {
         return accounts.findById(id)
                 .orElseThrow(() -> new DomainException(ErrorCode.ACCOUNT_NOT_FOUND, "Account " + id + " not found"));
     }

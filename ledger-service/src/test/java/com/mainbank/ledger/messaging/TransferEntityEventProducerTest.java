@@ -18,7 +18,8 @@ import static org.mockito.Mockito.verify;
 
 /** The producer only writes the outbox row; publishing to Kafka is {@link OutboxRelayTest}'s concern. */
 @ExtendWith(MockitoExtension.class)
-class TransferEventProducerTest {
+class TransferEntityEventProducerTest
+{
 
     private static final String TOPIC = "ledger.transfer.completed";
 

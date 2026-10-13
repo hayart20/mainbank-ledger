@@ -3,7 +3,7 @@ package com.mainbank.ledger.service;
 import com.mainbank.ledger.domain.constant.Currency;
 import com.mainbank.ledger.domain.constant.ErrorCode;
 import com.mainbank.ledger.domain.constant.TransferType;
-import com.mainbank.ledger.domain.entity.Transfer;
+import com.mainbank.ledger.domain.entity.TransferEntity;
 import com.mainbank.ledger.domain.exception.DomainException;
 import com.mainbank.ledger.dto.TransferResponse;
 import com.mainbank.ledger.repository.LedgerEntryRepository;
@@ -24,7 +24,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class TransferLookupServiceTest {
+class TransferEntityLookupServiceTest
+{
 
     @Mock TransferRepository transfers;
     @Mock LedgerEntryRepository ledger;
@@ -38,7 +39,7 @@ class TransferLookupServiceTest {
 
     @Test
     void getReturnsTheTransferWithItsLedgerEntries() {
-        Transfer t = Transfer.completed(UUID.randomUUID(), TransferType.TRANSFER, UUID.randomUUID(), UUID.randomUUID(),
+        TransferEntity t = TransferEntity.completed(UUID.randomUUID(), TransferType.TRANSFER, UUID.randomUUID(), UUID.randomUUID(),
                 new BigDecimal("10.00"), Currency.AMD);
         when(transfers.findById(t.getId())).thenReturn(Optional.of(t));
         when(ledger.findByTransferIdOrderByIdAsc(t.getId())).thenReturn(List.of());

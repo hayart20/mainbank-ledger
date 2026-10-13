@@ -5,8 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mainbank.ledger.config.LedgerProperties;
 import com.mainbank.ledger.domain.constant.ErrorCode;
 import com.mainbank.ledger.domain.constant.TransferType;
-import com.mainbank.ledger.domain.entity.IdempotencyRecord;
-import com.mainbank.ledger.domain.entity.Transfer;
+import com.mainbank.ledger.domain.entity.IdempotencyEntity;
+import com.mainbank.ledger.domain.entity.TransferEntity;
 import com.mainbank.ledger.domain.exception.DomainException;
 import com.mainbank.ledger.dto.TransferRequest;
 import com.mainbank.ledger.dto.TransferResponse;
@@ -104,16 +104,17 @@ public class TransferService {
                     "Amount exceeds the single-transfer limit of " + props.maxTransferAmount().toPlainString());
         }
 
-        Transfer transfer = ledgerPostingService.post(idempotencyKey, TransferType.TRANSFER, request.sourceAccountId(),
+        TransferEntity transferEntity = ledgerPostingService.post(idempotencyKey, TransferType.TRANSFER, request.sourceAccountId(),
                 request.targetAccountId(), request.amount(), request.currency(), false);
 
-        TransferResponse body = TransferResponse.from(transfer, ledger.findByTransferIdOrderByIdAsc(transfer.getId()));
-        idempotency.complete(idempotencyKey, transfer.getId(), CREATED, serialize(body));
+        TransferResponse body = TransferResponse.from(
+                transferEntity, ledger.findByTransferIdOrderByIdAsc(transferEntity.getId()));
+        idempotency.complete(idempotencyKey, transferEntity.getId(), CREATED, serialize(body));
         return new Result(body, CREATED, false);
     }
 
     private Result replay(UUID key, String requestHash) {
-        IdempotencyRecord record = idempotency.findById(key).orElseThrow();
+        IdempotencyEntity record = idempotency.findById(key).orElseThrow();
         if (!record.getRequestHash().equals(requestHash)) {
             throw new DomainException(ErrorCode.IDEMPOTENCY_KEY_REUSED, "Idempotency key was already used with a different request payload");
         }

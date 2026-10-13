@@ -1,7 +1,7 @@
 # Mainbank Ledger
 
 Multi-currency double-entry ledger with ACID transfers and DB-backed idempotency, built as a small set of
-microservices that talk through Kafka: the **ledger-service** moves money and announces every transfer, and
+microservices that talk through Kafka: the **ledger-service** moves money and announces every transferEntity, and
 independent consumers react to it (receipts, notifications, statements) behind one **api-gateway**.
 Spring Boot 3.5 · Java 25 · PostgreSQL 15 · Flyway · Kafka · JDK-only MinIO client (SigV4) · Testcontainers.
 
@@ -9,7 +9,7 @@ Spring Boot 3.5 · Java 25 · PostgreSQL 15 · Flyway · Kafka · JDK-only MinIO
                               ┌─────────────▶ receipt-service :8081       PDF → MinIO, receipt API   (schema receipt)
  client ─▶ api-gateway :8080 ─┼─────────────▶ statement-service :8083    read model, statements     (schema statement)
               │               │                      ▲                         ▲
-              ▼               │                      │ Kafka: ledger.transfer.completed (key = transferId, DLT)
+              ▼               │                      │ Kafka: ledger.transferEntity.completed (key = transferId, DLT)
         ledger-service :8080 ─┘──(outbox)────────────┴─────────────────────────┘
         accounts, transfers, ledger (schema public)                             ▼
                                                            notification-service :8082    notices      (schema notification)
@@ -21,7 +21,7 @@ Spring Boot 3.5 · Java 25 · PostgreSQL 15 · Flyway · Kafka · JDK-only MinIO
 | `ledger-service` | accounts, transfers, double-entry ledger; **producer** | schema `public` |
 | `receipt-service` | **consumer**: hash-stamped PDF receipts in MinIO, receipt API | schema `receipt` |
 | `notification-service` | **consumer**: notifies payer and payee (log sender, pluggable) | schema `notification` |
-| `statement-service` | **consumer**: read model of account activity, statement API | schema `statement` |
+| `statement-service` | **consumer**: read model of accountEntity activity, statement API | schema `statement` |
 
 Each consumer has its own consumer group, so every event reaches all of them independently and a new consumer
 needs no change to the ledger.
@@ -29,7 +29,7 @@ needs no change to the ledger.
 ## Run
 
 **Prerequisites:** Docker with Compose v2 (about 6 GB of memory for Docker is comfortable: the five services are
-limited to 0.5–1 GB each). A local JDK 25 and Maven are only needed to build or test outside Docker.
+limited to 0.5–1 GB each). A local JDK 21+ (the Docker images use 25) and Maven are only needed to build or test outside Docker.
 
 ```bash
 docker compose up --build          # postgres + minio + bucket + kafka + 4 services + api-gateway, all on :8080
@@ -57,20 +57,21 @@ docker compose up -d --build <service>   # rebuild and restart a single service,
 ### Tests
 
 ```bash
+# no local Maven? use the wrapper instead: ./mvnw (Linux/macOS/Git Bash) or mvnw.cmd (Windows) in place of mvn
 mvn test                           # unit tests only (*Test, Surefire) for all modules - fast, no Docker needed
 mvn verify                         # unit tests, then Testcontainers integration tests (*IT, Failsafe) - needs a Docker daemon
 mvn -pl receipt-service -am verify # a single service (and what it depends on)
 ```
 
 Unit and integration tests are separate: classes named `*Test` run in `mvn test`; classes named `*IT` (e.g.
-`TransferIT`) run only in `mvn verify`, so `mvn test` stays green on a machine without Docker.
+`TransferEntityIT`) run only in `mvn verify`, so `mvn test` stays green on a machine without Docker.
 
 Integration tests use Testcontainers with real infrastructure: `ledger-service` runs against Postgres + Kafka
 (concurrency, idempotency, outbox, broker outage); `receipt-service` runs against Postgres + Kafka + **MinIO**
 (`ReceiptIT`: event → PDF in MinIO → pre-signed download, tampered URL rejected, redelivery, MinIO outage with
 retry, poison message to the DLT).
 
-Without a local JDK 25, run the same build inside a JDK 25 container (mounting the Docker socket so Testcontainers
+Without a local JDK 21+, run the same build inside a JDK 25 container (mounting the Docker socket so Testcontainers
 can start its containers):
 
 ```bash
@@ -94,7 +95,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/w" -v "$H
 | `Schema-validation: missing column` / `Schema … has a version newer than the latest available migration` | An old Postgres volume from a different version of the project. `docker compose down -v`, then start again. |
 | Port 5432, 9000 or 8080 already in use | Stop the local service using it, or change the host side of the mapping in `docker-compose.yml`. |
 | Receipt link opens but MinIO answers 403 | The URL is signed for `MINIO_PUBLIC_ENDPOINT` (`http://localhost:9000`); open it through that exact host and port, and within 15 minutes. |
-| `409 RECEIPT_NOT_READY` right after a transfer | Normal: receipts are produced asynchronously (about a second). Call again. |
+| `409 RECEIPT_NOT_READY` right after a transferEntity | Normal: receipts are produced asynchronously (about a second). Call again. |
 | Gateway answers a plain `500 Internal Server Error` for one route | The service behind that route is down, still starting, or did not answer within 30 s; the other routes keep working. Check `docker compose ps` and the service's logs. The gateway does not translate this into 503/504 (see Known limitations). |
 
 ## API
@@ -108,7 +109,7 @@ Start the stack (`docker compose up --build`) and open **http://localhost:8080/s
 | http://localhost:8080/swagger-ui.html | Swagger UI for the whole system. The dropdown (top right) switches between the services |
 | http://localhost:8080/docs/ledger/v3/api-docs | OpenAPI 3 spec (JSON) of **ledger-service**: accounts, transfers |
 | http://localhost:8080/docs/receipt/v3/api-docs | OpenAPI spec of **receipt-service**: receipts |
-| http://localhost:8080/docs/statement/v3/api-docs | OpenAPI spec of **statement-service**: account statements |
+| http://localhost:8080/docs/statement/v3/api-docs | OpenAPI spec of **statement-service**: accountEntity statements |
 
 The specs can be imported into Postman, Insomnia or a client generator (`openapi-generator`).
 `notification-service` has no HTTP API (it only consumes Kafka events), so it has no entry.
@@ -121,8 +122,8 @@ The specs can be imported into Postman, Insomnia or a client generator (`openapi
    key and body again replays the first response (`Idempotent-Replayed: true`) and moves no money.
 3. Switch the dropdown to **receipt-service** and run `GET /api/v1/receipts/{transferId}`; use `mode=url` for a
    15-minute pre-signed MinIO link or `mode=stream` for the PDF. The receipt is produced asynchronously, so for
-   about a second after the transfer it answers `409 RECEIPT_NOT_READY`; call it again.
-4. Switch to **statement-service** and run `GET /api/v1/accounts/{accountId}/statement` for either account.
+   about a second after the transferEntity it answers `409 RECEIPT_NOT_READY`; call it again.
+4. Switch to **statement-service** and run `GET /api/v1/accounts/{accountId}/statement` for either accountEntity.
 
 **How it works.** Each service generates its own spec with springdoc. The gateway exposes the three specs under
 `/docs/<service>/v3/api-docs` (it strips the prefix and keeps the client's `Host` header, so each spec's `servers`
@@ -159,7 +160,7 @@ curl -s -X POST localhost:8080/api/v1/transfers -H 'Content-Type: application/js
 curl -s localhost:8080/api/v1/transfers/<id>                    # ledger legs (the id from the POST response)
 curl -s localhost:8080/api/v1/receipts/<id>                      # {"url": "...", "expiresAt": "...", "sha256": "..."}
 curl -s -o receipt.pdf "localhost:8080/api/v1/receipts/<id>?mode=stream"
-curl -s "localhost:8080/api/v1/accounts/$A/statement?size=20"    # account activity + debit/credit totals
+curl -s "localhost:8080/api/v1/accounts/$A/statement?size=20"    # accountEntity activity + debit/credit totals
 curl -s localhost:8080/api/v1/system/status                      # UP / DEGRADED / DOWN, per service, with probe times
 ```
 
@@ -176,7 +177,7 @@ Errors are RFC 7807 `application/problem+json` with a stable `code`:
 ```
 ledger-service:  Controller → Service (transaction boundary) → Repository → PostgreSQL
                                   └─ same transaction: INSERT outbox_events
-                 OutboxRelay (scheduled) → Kafka ledger.transfer.completed   (at-least-once)
+                 OutboxRelay (scheduled) → Kafka ledger.transferEntity.completed   (at-least-once)
 
 receipt-service: @KafkaListener → INSERT receipts ON CONFLICT DO NOTHING → PDF → MinIO → UPDATE receipts
                  retryPending (scheduled, claims rows optimistically) ← FAILED / PENDING rows
@@ -185,47 +186,47 @@ receipt-service: @KafkaListener → INSERT receipts ON CONFLICT DO NOTHING → P
 **Money path – one DB transaction** (`TransferService.execute`):
 1. `INSERT ... ON CONFLICT DO NOTHING` the idempotency key. 
 2. `lock_timeout` (config `ledger.lock-timeout`, default 5s, set first so it also covers the idempotency wait), then `SELECT ... FOR UPDATE` on the two accounts **in ascending id order**.
-3. Validate (status, currency, CBA ceiling, overdraft) in the `Account` aggregate; mutate balances.
-4. Insert the transfer + DEBIT and CREDIT ledger rows; store the response body with the idempotency key.
-5. The `transfer-completed` event is written to the `outbox_events` table in this same transaction, then commit.
-   The event exists if and only if the transfer committed; a relay publishes it to Kafka afterwards.
+3. Validate (status, currency, CBA ceiling, overdraft) in the `AccountEntity` aggregate; mutate balances.
+4. Insert the transferEntity + DEBIT and CREDIT ledger rows; store the response body with the idempotency key.
+5. The `transferEntity-completed` event is written to the `outbox_events` table in this same transaction, then commit.
+   The event exists if and only if the transferEntity committed; a relay publishes it to Kafka afterwards.
 
 ### Decisions and trade-offs
 
 * **Lock order, not retries, prevents deadlocks.** A→B and B→A both lock `min(id)` first. Covered by
   `oppositeDirectionTransfersDoNotDeadlockAndConserveMoney`. READ COMMITTED is enough *because* every
   read-modify-write happens under a row lock; SERIALIZABLE would add retry loops for no extra safety here.
-* **Pessimistic locking only; no `@Version` on `Account`.** Optimistic locking detects a conflicting write after
+* **Pessimistic locking only; no `@Version` on `AccountEntity`.** Optimistic locking detects a conflicting write after
   the fact and makes the caller retry. Here every balance change takes `SELECT ... FOR UPDATE` first, so a second
   writer waits and then reads the committed balance: there is never a stale read for `@Version` to catch, and the
   `OptimisticLockException` path (extra column, migration, error mapping, retry) would be dead code. Mixing both
-  on one row also makes the concurrency story harder to reason about. Revisit if an account is ever updated
-  without the row lock (e.g. an admin endpoint that freezes an account): read it with `findByIdForUpdate` too, or
+  on one row also makes the concurrency story harder to reason about. Revisit if an accountEntity is ever updated
+  without the row lock (e.g. an admin endpoint that freezes an accountEntity): read it with `findByIdForUpdate` too, or
   add `@Version` at that point.
-* **Idempotency lives in the same transaction as the transfer.** A concurrent duplicate blocks on the unique
+* **Idempotency lives in the same transaction as the transferEntity.** A concurrent duplicate blocks on the unique
   index until the first request commits, then replays its stored response – exactly-once without advisory locks
   or a separate "in progress" state. Trade-off: a *failed* request (e.g. insufficient funds) rolls back its key,
   so a retry re-evaluates against current balances instead of replaying the error. Same key + different payload
   → 422 (payload hash comparison). A duplicate that waits on an in-flight original longer than `lock-timeout`
   gets 503 `LOCK_TIMEOUT` + `Retry-After`; retrying with the same key is always safe and then replays the result.
-* **`TransferStatus` has a single value, `COMPLETED`, on purpose.** A transfer row is only written after the money
-  has moved, inside the same transaction as the balance changes, so a stored transfer cannot be anything else. A
-  refused transfer (insufficient funds, frozen account, currency mismatch, limit) throws and the transaction rolls
-  back: no transfer, no ledger entries and not even the idempotency key. Posting is synchronous and atomic, so
+* **`TransferStatus` has a single value, `COMPLETED`, on purpose.** A transferEntity row is only written after the money
+  has moved, inside the same transaction as the balance changes, so a stored transferEntity cannot be anything else. A
+  refused transferEntity (insufficient funds, frozen accountEntity, currency mismatch, limit) throws and the transaction rolls
+  back: no transferEntity, no ledger entries and not even the idempotency key. Posting is synchronous and atomic, so
   there is no visible "pending" state either, and every published event means *completed*. Adding `FAILED` to the
   enum alone would be dead code, since nothing could ever set it. If more states are needed they come with a
-  feature: `REVERSED` (a refund is a new compensating transfer, the ledger stays append-only), or `PENDING` once
+  feature: `REVERSED` (a refund is a new compensating transferEntity, the ledger stays append-only), or `PENDING` once
   posting becomes asynchronous (external network, fraud check, approval).
-* **Opening balances are ledger postings** from a per-currency bank settlement account (seeded in V1), so
+* **Opening balances are ledger postings** from a per-currency bank settlement accountEntity (seeded in V1), so
   "no balance mutation without ledger entries" holds from the first cent, and `SUM(balance) = 0` globally.
-  Trade-off: every funded account creation contends on one settlement row per currency – fine for onboarding,
-  would be sharded (N settlement accounts) at high volume. The API refuses settlement accounts as a transfer source.
+  Trade-off: every funded accountEntity creation contends on one settlement row per currency – fine for onboarding,
+  would be sharded (N settlement accounts) at high volume. The API refuses settlement accounts as a transferEntity source.
 * **Defence in depth in the schema:** `CHECK (balance >= -overdraft_limit)`, positive amounts, `source <> target`,
-  and `LedgerEntry` is append-only in Java (no setters, every column `updatable = false`, `@PreRemove` rejects deletes). A bulk JPQL/SQL
+  and `LedgerEntryEntity` is append-only in Java (no setters, every column `updatable = false`, `@PreRemove` rejects deletes). A bulk JPQL/SQL
   statement would bypass this - restrict the app DB role to INSERT/SELECT on `ledger_entries` in production.
 * **Receipts are a separate service, outside the money transaction.** PDF + S3 I/O must not hold row locks or
-  fail a transfer, and the receipt service has its own database schema (`receipt`) and deploys independently.
-  The ledger announces every posting with a **self-contained** `ledger.transfer.completed` event (IBANs, owner
+  fail a transferEntity, and the receipt service has its own database schema (`receipt`) and deploys independently.
+  The ledger announces every posting with a **self-contained** `ledger.transferEntity.completed` event (IBANs, owner
   names, amount, currency, timestamp, `schemaVersion`; key = transferId), so the consumer never reads ledger
   tables.
 * **No shared code between services.** The only coupling is the event contract on the topic. The ledger owns
@@ -240,11 +241,11 @@ receipt-service: @KafkaListener → INSERT receipts ON CONFLICT DO NOTHING → P
   group, added without any ledger change.
 * **Transactional outbox instead of "send after commit".** A best-effort send after commit can lose the event
   (broker down, crash between commit and send). The event is therefore inserted into `outbox_events` in the
-  transfer's own transaction and published by `OutboxRelay` (`FOR UPDATE SKIP LOCKED`, so replicas cooperate)
+  transferEntity's own transaction and published by `OutboxRelay` (`FOR UPDATE SKIP LOCKED`, so replicas cooperate)
   with acknowledgement before it is marked published. Delivery is at-least-once; during a broker outage events
-  wait in the table and are delivered afterwards (covered by `TransferIT`).
+  wait in the table and are delivered afterwards (covered by `TransferEntityIT`).
 * **Idempotent consumer.** The receipt service inserts the row with `ON CONFLICT DO NOTHING` and never
-  regenerates a `READY` receipt, so redelivery is harmless. Malformed messages go to `ledger.transfer.completed.DLT`
+  regenerates a `READY` receipt, so redelivery is harmless. Malformed messages go to `ledger.transferEntity.completed.DLT`
   without retries. If MinIO is down the receipt stays `FAILED/PENDING` and a scheduler retries (max 5 attempts);
   several instances are safe because a row is claimed with an optimistic `UPDATE ... WHERE updated_at = :seen`.
 * **Existing receipts were imported** from `transfers.receipt_*` by the receipt service's `V2` migration (a no-op
@@ -269,10 +270,10 @@ receipt-service: @KafkaListener → INSERT receipts ON CONFLICT DO NOTHING → P
 ### Known limitations (would address next)
 
 **Security and operations**
-* **No authentication or authorization anywhere.** Any client can read any account's statement or receipt, and the
+* **No authentication or authorization anywhere.** Any client can read any accountEntity's statement or receipt, and the
   Swagger UI and specs are open. Authentication belongs at the gateway.
 * No rate limiting (the gateway supports a Bucket4j `rateLimit` filter; not enabled). A single configurable
-  per-transfer ceiling stands in for per-customer CBA limits.
+  per-transferEntity ceiling stands in for per-customer CBA limits.
 * The gateway does not translate upstream failures: a stopped or hung service shows up as Spring's generic `500`
   instead of `503` / `504` with `Retry-After`. That mapping was implemented and then removed to keep the gateway to
   routing and Swagger only; a small `@RestControllerAdvice` for `ResourceAccessException` would bring it back.
@@ -283,7 +284,7 @@ receipt-service: @KafkaListener → INSERT receipts ON CONFLICT DO NOTHING → P
 
 **Messaging**
 * Delivery is at-least-once and consumers are idempotent, but there is no tooling to replay the dead-letter topic;
-  records in `ledger.transfer.completed.DLT` are inspected and re-published by hand.
+  records in `ledger.transferEntity.completed.DLT` are inspected and re-published by hand.
 * The outbox relay polls every 500 ms, so events reach Kafka within about a second, not instantly.
 * The `KafkaConfig` (DLT and retry policy) is repeated in each consumer; it could become a small internal library.
 * `transfers.receipt_*` columns are unused since receipts moved to their own service; drop them in a later ledger
@@ -293,7 +294,7 @@ receipt-service: @KafkaListener → INSERT receipts ON CONFLICT DO NOTHING → P
 * **Refused transfers leave no record.** Because a failed attempt rolls back completely, "who tried to move money
   and was refused, and why" is visible only as an HTTP 422 and a log line, not in the database. For compliance or
   fraud analysis, add an attempts table (for example `transfer_attempts`) written in its own transaction, rather
-  than a `FAILED` transfer status: it keeps `transfers` meaning "money actually moved" and leaves the idempotency
+  than a `FAILED` transferEntity status: it keeps `transfers` meaning "money actually moved" and leaves the idempotency
   rules and the `SUM(balance) = 0` invariant untouched.
 * PDFs use built-in Helvetica (Latin-1); Armenian/Cyrillic owner names print as `?` until a Unicode font is embedded.
   Hashes are computed over the real (Unicode) values.
@@ -312,11 +313,11 @@ receipt-service: @KafkaListener → INSERT receipts ON CONFLICT DO NOTHING → P
 There is no separate stress script: the concurrency guarantees are asserted by integration tests that run real
 parallel requests against Postgres (`mvn -pl ledger-service -am verify`):
 
-| Test (`TransferIT`) | What it proves |
+| Test (`TransferEntityIT`) | What it proves |
 |---|---|
-| `concurrentDebitsNeverDoubleSpend` | many parallel debits against one account: exactly as many succeed as the balance allows, the rest get 422, the balance never goes below the limit |
+| `concurrentDebitsNeverDoubleSpend` | many parallel debits against one accountEntity: exactly as many succeed as the balance allows, the rest get 422, the balance never goes below the limit |
 | `oppositeDirectionTransfersDoNotDeadlockAndConserveMoney` | A→B and B→A in parallel complete without deadlock and the total is conserved |
-| `concurrentRetriesWithSameKeyExecuteExactlyOnce` | parallel retries of one idempotency key create one transfer; the balance is debited once |
+| `concurrentRetriesWithSameKeyExecuteExactlyOnce` | parallel retries of one idempotency key create one transferEntity; the balance is debited once |
 | `ledgerIsGloballyBalanced` | the sum of debits equals the sum of credits, and the sum of all balances is zero |
 
 To watch locks yourself while sending parallel requests to the running stack:

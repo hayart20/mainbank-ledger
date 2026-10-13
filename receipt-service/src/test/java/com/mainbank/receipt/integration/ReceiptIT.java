@@ -169,7 +169,7 @@ class ReceiptIT extends AbstractIntegrationTest {
 
     @Test
     void poisonMessageIsDeadLetteredAndTheConsumerKeepsWorking() throws Exception {
-        String poison = "{\"this\":\"is not a transfer\" " + UUID.randomUUID();
+        String poison = "{\"this\":\"is not a transferEntity\" " + UUID.randomUUID();
 
         kafka.send(TOPIC, "poison-" + UUID.randomUUID(), poison).get(15, TimeUnit.SECONDS);
 

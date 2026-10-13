@@ -11,7 +11,8 @@ import java.util.UUID;
 /** Immutable posting leg. Rows are append-only: all columns are non-updatable (edits are never flushed) and removal is rejected. */
 @Entity
 @Table(name = "ledger_entries")
-public class LedgerEntry {
+public class LedgerEntryEntity
+{
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -33,9 +34,9 @@ public class LedgerEntry {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    protected LedgerEntry() { }
+    protected LedgerEntryEntity() { }
 
-    public LedgerEntry(UUID transferId, UUID accountId, EntryType entryType, BigDecimal amount) {
+    public LedgerEntryEntity(UUID transferId, UUID accountId, EntryType entryType, BigDecimal amount) {
         this.transferId = transferId;
         this.accountId = accountId;
         this.entryType = entryType;

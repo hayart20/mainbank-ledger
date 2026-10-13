@@ -6,8 +6,8 @@ import com.mainbank.ledger.domain.constant.Currency;
 import com.mainbank.ledger.domain.constant.ErrorCode;
 import com.mainbank.ledger.domain.constant.TransferStatus;
 import com.mainbank.ledger.domain.constant.TransferType;
-import com.mainbank.ledger.domain.entity.IdempotencyRecord;
-import com.mainbank.ledger.domain.entity.Transfer;
+import com.mainbank.ledger.domain.entity.IdempotencyEntity;
+import com.mainbank.ledger.domain.entity.TransferEntity;
 import com.mainbank.ledger.domain.exception.DomainException;
 import com.mainbank.ledger.dto.TransferRequest;
 import com.mainbank.ledger.dto.TransferResponse;
@@ -44,7 +44,8 @@ import static org.mockito.Mockito.when;
 
 /** Business flow of {@link TransferService} in isolation: idempotency, the CBA limit and event publishing. */
 @ExtendWith(MockitoExtension.class)
-class TransferServiceTest {
+class TransferEntityServiceTest
+{
 
     private static final BigDecimal LIMIT = new BigDecimal("1000.00");
 
@@ -69,37 +70,37 @@ class TransferServiceTest {
         return new TransferRequest(source, target, new BigDecimal(amount), Currency.AMD);
     }
 
-    private Transfer completedTransfer(String amount) {
-        return Transfer.completed(key, TransferType.TRANSFER, source, target, new BigDecimal(amount), Currency.AMD);
+    private TransferEntity completedTransfer(String amount) {
+        return TransferEntity.completed(key, TransferType.TRANSFER, source, target, new BigDecimal(amount), Currency.AMD);
     }
 
     @Test
     void firstRequestPostsAndCachesResponse() {
         TransferRequest request = request("250.25");
-        Transfer transfer = completedTransfer("250.25");
+        TransferEntity transferEntity = completedTransfer("250.25");
         when(idempotency.tryClaim(key, Hashing.sha256Hex(request.canonical()))).thenReturn(1);
         when(posting.post(key, TransferType.TRANSFER, source, target, request.amount(), Currency.AMD, false))
-                .thenReturn(transfer);
-        when(ledger.findByTransferIdOrderByIdAsc(transfer.getId())).thenReturn(List.of());
+                .thenReturn(transferEntity);
+        when(ledger.findByTransferIdOrderByIdAsc(transferEntity.getId())).thenReturn(List.of());
 
         TransferService.Result result = service.execute(key, request);
 
         assertThat(result.status()).isEqualTo(TransferService.CREATED);
         assertThat(result.replayed()).isFalse();
-        assertThat(result.body().id()).isEqualTo(transfer.getId());
+        assertThat(result.body().id()).isEqualTo(transferEntity.getId());
         assertThat(result.body().amount()).isEqualByComparingTo("250.25");
 
         ArgumentCaptor<String> cached = ArgumentCaptor.forClass(String.class);
-        verify(idempotency).complete(eq(key), eq(transfer.getId()), eq(TransferService.CREATED), cached.capture());
-        assertThat(cached.getValue()).contains(transfer.getId().toString());
+        verify(idempotency).complete(eq(key), eq(transferEntity.getId()), eq(TransferService.CREATED), cached.capture());
+        assertThat(cached.getValue()).contains(transferEntity.getId().toString());
     }
 
     @Test
     void lockTimeoutIsAppliedBeforeTheIdempotencyClaim() {
         TransferRequest request = request("10.00");
-        Transfer transfer = completedTransfer("10.00");
+        TransferEntity transferEntity = completedTransfer("10.00");
         when(idempotency.tryClaim(any(), anyString())).thenReturn(1);
-        when(posting.post(any(), any(), any(), any(), any(), any(), eq(false))).thenReturn(transfer);
+        when(posting.post(any(), any(), any(), any(), any(), any(), eq(false))).thenReturn(transferEntity);
 
         service.execute(key, request);
 
@@ -117,7 +118,7 @@ class TransferServiceTest {
         TransferResponse original = new TransferResponse(transferId, TransferType.TRANSFER, TransferStatus.COMPLETED,
                 source, target, new BigDecimal("40.00"), Currency.AMD, Instant.now(), List.of());
 
-        IdempotencyRecord record = mock(IdempotencyRecord.class);
+        IdempotencyEntity record = mock(IdempotencyEntity.class);
         when(record.getRequestHash()).thenReturn(hash);
         when(record.getResponseStatus()).thenReturn(TransferService.CREATED);
         when(record.getResponseBody()).thenReturn(json.writeValueAsString(original));
@@ -136,7 +137,7 @@ class TransferServiceTest {
     @Test
     void duplicateKeyWithDifferentPayloadIsRejected() {
         TransferRequest request = request("20.00");
-        IdempotencyRecord record = mock(IdempotencyRecord.class);
+        IdempotencyEntity record = mock(IdempotencyEntity.class);
         when(record.getRequestHash()).thenReturn(Hashing.sha256Hex(request("10.00").canonical()));
         when(idempotency.tryClaim(eq(key), anyString())).thenReturn(0);
         when(idempotency.findById(key)).thenReturn(Optional.of(record));
@@ -159,9 +160,9 @@ class TransferServiceTest {
 
     @Test
     void amountExactlyAtTheLimitIsAllowed() {
-        Transfer transfer = completedTransfer("1000.00");
+        TransferEntity transferEntity = completedTransfer("1000.00");
         when(idempotency.tryClaim(any(), anyString())).thenReturn(1);
-        when(posting.post(any(), any(), any(), any(), any(), any(), eq(false))).thenReturn(transfer);
+        when(posting.post(any(), any(), any(), any(), any(), any(), eq(false))).thenReturn(transferEntity);
 
         TransferService.Result result = service.execute(key, request("1000.00"));
 
