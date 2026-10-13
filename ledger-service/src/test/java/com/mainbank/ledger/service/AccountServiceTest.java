@@ -49,9 +49,9 @@ class AccountServiceTest {
     void createOpensActiveAccountWithZeroBalanceAndGeneratedIban() {
         givenIbanSequence();
 
-        Account a = service.create(new CreateAccountRequest("  Anna Hakobyan  ", Currency.USD, null, new BigDecimal("50")));
+        Account a = service.create(new CreateAccountRequest("  Hayk Harutyunyan  ", Currency.USD, null, new BigDecimal("50")));
 
-        assertThat(a.getOwnerName()).isEqualTo("Anna Hakobyan"); // trimmed
+        assertThat(a.getOwnerName()).isEqualTo("Hayk Harutyunyan"); // trimmed
         assertThat(a.getCurrency()).isEqualTo(Currency.USD);
         assertThat(a.getStatus()).isEqualTo(AccountStatus.ACTIVE);
         assertThat(a.isSystemAccount()).isFalse();
@@ -64,8 +64,8 @@ class AccountServiceTest {
     void createWithoutInitialBalanceDoesNotPostAnOpeningDeposit() {
         givenIbanSequence();
 
-        service.create(new CreateAccountRequest("Anna", Currency.AMD, null, null));
-        service.create(new CreateAccountRequest("Anna", Currency.AMD, BigDecimal.ZERO, null));
+        service.create(new CreateAccountRequest("Hayk", Currency.AMD, null, null));
+        service.create(new CreateAccountRequest("Hayk", Currency.AMD, BigDecimal.ZERO, null));
 
         verify(posting, never()).openingDeposit(any(), any());
     }
@@ -74,7 +74,7 @@ class AccountServiceTest {
     void createWithInitialBalanceFundsItThroughALedgerPostingNeverADirectWrite() {
         givenIbanSequence();
 
-        Account a = service.create(new CreateAccountRequest("Anna", Currency.AMD, new BigDecimal("500.00"), null));
+        Account a = service.create(new CreateAccountRequest("Hayk", Currency.AMD, new BigDecimal("500.00"), null));
 
         verify(posting).openingDeposit(a, new BigDecimal("500.00"));
         assertThat(a.getBalance()).isEqualByComparingTo("0.00"); // only the (mocked) posting may change it
@@ -84,7 +84,7 @@ class AccountServiceTest {
     void lockTimeoutIsAppliedBeforeAnythingIsWritten() {
         givenIbanSequence();
 
-        service.create(new CreateAccountRequest("Anna", Currency.AMD, new BigDecimal("1.00"), null));
+        service.create(new CreateAccountRequest("Hayk", Currency.AMD, new BigDecimal("1.00"), null));
 
         InOrder order = inOrder(posting, accounts);
         order.verify(posting).applyLockTimeout();
@@ -94,7 +94,7 @@ class AccountServiceTest {
 
     @Test
     void getReturnsTheAccount() {
-        Account a = Account.open("AM01", "Anna", Currency.AMD, BigDecimal.ZERO);
+        Account a = Account.open("AM01", "Hayk", Currency.AMD, BigDecimal.ZERO);
         when(accounts.findById(a.getId())).thenReturn(Optional.of(a));
 
         assertThat(service.get(a.getId())).isSameAs(a);

@@ -20,20 +20,20 @@ class ReceiptPdfAndDataTest {
 
     @Test
     void canonicalFormIsStableSoOldReceiptsKeepVerifying() {
-        assertThat(data("Anna").canonical()).isEqualTo(
+        assertThat(data("Hayk").canonical()).isEqualTo(
                 "11111111-1111-1111-1111-111111111111|1767323045123|AM11|AM22|12.30|AMD|TRANSFER");
     }
 
     @Test
     void detailsHashIgnoresOwnerNamesButCoversTheAmount() {
-        assertThat(data("Anna").detailsHash()).isEqualTo(data("Someone else").detailsHash());
-        assertThat(data("Anna").detailsHash()).isNotEqualTo(new ReceiptData(data("Anna").transferId(), WHEN, "AM11", "Anna",
+        assertThat(data("Hayk").detailsHash()).isEqualTo(data("Someone else").detailsHash());
+        assertThat(data("Hayk").detailsHash()).isNotEqualTo(new ReceiptData(data("Hayk").transferId(), WHEN, "AM11", "Hayk",
                 "AM22", "Bob", new BigDecimal("12.31"), "AMD", "TRANSFER").detailsHash());
     }
 
     @Test
     void generatesAPdfDocument() {
-        byte[] pdf = new ReceiptPdfGenerator().generate(data("Anna ա")); // non-Latin-1 must not break generation
+        byte[] pdf = new ReceiptPdfGenerator().generate(data("Hayk ա")); // non-Latin-1 must not break generation
 
         assertThat(new String(pdf, 0, 5, StandardCharsets.ISO_8859_1)).isEqualTo("%PDF-");
         assertThat(pdf.length).isGreaterThan(500);

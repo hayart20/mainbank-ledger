@@ -47,8 +47,8 @@ class ReceiptIT extends AbstractIntegrationTest {
 
     private static TransferCompletedMessage event(String amount) {
         return new TransferCompletedMessage(UUID.randomUUID(), "TRANSFER", Instant.now().truncatedTo(ChronoUnit.MILLIS),
-                "AM11103000000000001000000001", "Anna Աննա",
-                "AM22103000000000001000000002", "Aram Hakobyan", new BigDecimal(amount), "AMD");
+                "AM11103000000000001000000001", "Hayk Հայկ",
+                "AM22103000000000001000000002", "Aram Harutyunyan", new BigDecimal(amount), "AMD");
     }
 
     /**
@@ -196,7 +196,7 @@ class ReceiptIT extends AbstractIntegrationTest {
         jdbc.update("""
                 insert into receipts (transfer_id, type, transfer_created_at, source_iban, source_owner, target_iban,
                                       target_owner, amount, currency, status, attempts)
-                values (?, 'TRANSFER', now(), 'AM11', 'Anna', 'AM22', 'Bob', 10.00, 'AMD', 'FAILED', 5)""", id);
+                values (?, 'TRANSFER', now(), 'AM11', 'Hayk', 'AM22', 'Bob', 10.00, 'AMD', 'FAILED', 5)""", id);
 
         ResponseEntity<Map> r = rest.getForEntity("/api/v1/receipts/" + id, Map.class);
 

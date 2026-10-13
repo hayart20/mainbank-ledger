@@ -148,9 +148,9 @@ the gateway, so there is no other Swagger URL to use.
 
 ```bash
 A=$(curl -s -X POST localhost:8080/api/v1/accounts -H 'Content-Type: application/json' \
-     -d '{"ownerName":"Anna Petrosyan","currency":"AMD","initialBalance":1000000}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+     -d '{"ownerName":"Hayk Harutyunyan","currency":"AMD","initialBalance":1000000}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
 B=$(curl -s -X POST localhost:8080/api/v1/accounts -H 'Content-Type: application/json' \
-     -d '{"ownerName":"Aram Hakobyan","currency":"AMD"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+     -d '{"ownerName":"Aram Harutyunyan","currency":"AMD"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
 
 curl -s -X POST localhost:8080/api/v1/transfers -H 'Content-Type: application/json' \
      -H "X-Idempotency-Key: $(uuidgen)" \
@@ -208,6 +208,14 @@ receipt-service: @KafkaListener → INSERT receipts ON CONFLICT DO NOTHING → P
   so a retry re-evaluates against current balances instead of replaying the error. Same key + different payload
   → 422 (payload hash comparison). A duplicate that waits on an in-flight original longer than `lock-timeout`
   gets 503 `LOCK_TIMEOUT` + `Retry-After`; retrying with the same key is always safe and then replays the result.
+* **`TransferStatus` has a single value, `COMPLETED`, on purpose.** A transfer row is only written after the money
+  has moved, inside the same transaction as the balance changes, so a stored transfer cannot be anything else. A
+  refused transfer (insufficient funds, frozen account, currency mismatch, limit) throws and the transaction rolls
+  back: no transfer, no ledger entries and not even the idempotency key. Posting is synchronous and atomic, so
+  there is no visible "pending" state either, and every published event means *completed*. Adding `FAILED` to the
+  enum alone would be dead code, since nothing could ever set it. If more states are needed they come with a
+  feature: `REVERSED` (a refund is a new compensating transfer, the ledger stays append-only), or `PENDING` once
+  posting becomes asynchronous (external network, fraud check, approval).
 * **Opening balances are ledger postings** from a per-currency bank settlement account (seeded in V1), so
   "no balance mutation without ledger entries" holds from the first cent, and `SUM(balance) = 0` globally.
   Trade-off: every funded account creation contends on one settlement row per currency – fine for onboarding,
@@ -282,6 +290,11 @@ receipt-service: @KafkaListener → INSERT receipts ON CONFLICT DO NOTHING → P
   migration, once every environment has run the receipt import.
 
 **Features**
+* **Refused transfers leave no record.** Because a failed attempt rolls back completely, "who tried to move money
+  and was refused, and why" is visible only as an HTTP 422 and a log line, not in the database. For compliance or
+  fraud analysis, add an attempts table (for example `transfer_attempts`) written in its own transaction, rather
+  than a `FAILED` transfer status: it keeps `transfers` meaning "money actually moved" and leaves the idempotency
+  rules and the `SUM(balance) = 0` invariant untouched.
 * PDFs use built-in Helvetica (Latin-1); Armenian/Cyrillic owner names print as `?` until a Unicode font is embedded.
   Hashes are computed over the real (Unicode) values.
 * Notifications are only logged (`LoggingNotificationSender`); an e-mail, SMS or push sender plugs in behind the

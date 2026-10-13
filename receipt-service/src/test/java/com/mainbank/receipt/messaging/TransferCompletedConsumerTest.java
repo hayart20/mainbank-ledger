@@ -34,7 +34,7 @@ class TransferCompletedConsumerTest {
     @Test
     void selfContainedMessageIsHandedToTheReceiptService() throws Exception {
         TransferCompletedMessage message = new TransferCompletedMessage(UUID.randomUUID(), "TRANSFER",
-                Instant.parse("2026-01-02T03:04:05.123Z"), "AM11", "Anna", "AM22", "Bob", new BigDecimal("12.30"), "AMD");
+                Instant.parse("2026-01-02T03:04:05.123Z"), "AM11", "Hayk", "AM22", "Bob", new BigDecimal("12.30"), "AMD");
 
         consumer.onTransferCompleted(json.writeValueAsString(message));
 
@@ -51,14 +51,14 @@ class TransferCompletedConsumerTest {
         UUID id = UUID.fromString("11111111-2222-3333-4444-555555555555");
         String payload = """
                 {"schemaVersion":1,"transferId":"%s","type":"TRANSFER","createdAt":"2026-01-02T03:04:05.123Z",
-                 "sourceAccountId":"aaaaaaaa-0000-0000-0000-000000000001","sourceIban":"AM11","sourceOwner":"Anna",
+                 "sourceAccountId":"aaaaaaaa-0000-0000-0000-000000000001","sourceIban":"AM11","sourceOwner":"Hayk",
                  "targetAccountId":"bbbbbbbb-0000-0000-0000-000000000002","targetIban":"AM22","targetOwner":"Bob",
                  "amount":12.30,"currency":"AMD","someFutureField":{"nested":true}}""".formatted(id);
 
         consumer.onTransferCompleted(payload);
 
         verify(receipts).onTransferCompleted(new TransferCompletedMessage(id, "TRANSFER",
-                Instant.parse("2026-01-02T03:04:05.123Z"), "AM11", "Anna", "AM22", "Bob", new BigDecimal("12.30"), "AMD"));
+                Instant.parse("2026-01-02T03:04:05.123Z"), "AM11", "Hayk", "AM22", "Bob", new BigDecimal("12.30"), "AMD"));
     }
 
     @Test

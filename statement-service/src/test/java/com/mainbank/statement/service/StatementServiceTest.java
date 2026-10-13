@@ -43,7 +43,7 @@ class StatementServiceTest {
 
     @Test
     void recordsADebitForThePayerAndACreditForThePayeeWithTheCounterparty() {
-        var m = new TransferCompletedMessage(transferId, "TRANSFER", WHEN, source, "AM11", "Anna",
+        var m = new TransferCompletedMessage(transferId, "TRANSFER", WHEN, source, "AM11", "Hayk",
                 target, "AM22", "Bob", new BigDecimal("25.50"), "USD");
 
         service.onTransferCompleted(m);
@@ -52,7 +52,7 @@ class StatementServiceTest {
         order.verify(lines).insertIfAbsent(transferId, source, "DEBIT", "TRANSFER", WHEN, new BigDecimal("25.50"),
                 "USD", target, "AM22", "Bob");
         order.verify(lines).insertIfAbsent(transferId, target, "CREDIT", "TRANSFER", WHEN, new BigDecimal("25.50"),
-                "USD", source, "AM11", "Anna");
+                "USD", source, "AM11", "Hayk");
     }
 
     @Test

@@ -45,7 +45,7 @@ class ReceiptServiceTest {
     private ReceiptService service;
     private final UUID id = UUID.randomUUID();
     private final TransferCompletedMessage message = new TransferCompletedMessage(id, "TRANSFER", WHEN,
-            "AM11", "Anna", "AM22", "Bob", new BigDecimal("12.34"), "AMD");
+            "AM11", "Hayk", "AM22", "Bob", new BigDecimal("12.34"), "AMD");
 
     @BeforeEach
     void setUp() {
@@ -59,7 +59,7 @@ class ReceiptServiceTest {
         ReflectionTestUtils.setField(r, "type", "TRANSFER");
         ReflectionTestUtils.setField(r, "transferCreatedAt", WHEN);
         ReflectionTestUtils.setField(r, "sourceIban", "AM11");
-        ReflectionTestUtils.setField(r, "sourceOwner", "Anna");
+        ReflectionTestUtils.setField(r, "sourceOwner", "Hayk");
         ReflectionTestUtils.setField(r, "targetIban", "AM22");
         ReflectionTestUtils.setField(r, "targetOwner", "Bob");
         ReflectionTestUtils.setField(r, "amount", new BigDecimal("12.34"));
@@ -88,7 +88,7 @@ class ReceiptServiceTest {
 
         service.onTransferCompleted(message);
 
-        verify(receipts).insertIfAbsent(id, "TRANSFER", WHEN, "AM11", "Anna", "AM22", "Bob", new BigDecimal("12.34"), "AMD");
+        verify(receipts).insertIfAbsent(id, "TRANSFER", WHEN, "AM11", "Hayk", "AM22", "Bob", new BigDecimal("12.34"), "AMD");
         verify(storage).put(key, PDF, detailsHash);
         verify(receipts).markReady(eq(id), eq(key), eq(detailsHash), eq(ReceiptData.sha256Hex(PDF)), any());
         verify(receipts, never()).markFailed(any(), any());

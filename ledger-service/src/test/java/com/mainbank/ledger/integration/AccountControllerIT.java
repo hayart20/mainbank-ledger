@@ -49,12 +49,12 @@ class AccountControllerIT extends AbstractIntegrationTest {
 
     @Test
     void createReturns201WithLocationAndAnEmptyActiveAccount() {
-        ResponseEntity<AccountResponse> r = create(Map.of("ownerName", "Anna Hakobyan", "currency", "AMD"));
+        ResponseEntity<AccountResponse> r = create(Map.of("ownerName", "Hayk Harutyunyan", "currency", "AMD"));
 
         assertThat(r.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         AccountResponse a = r.getBody();
         assertThat(r.getHeaders().getLocation()).hasPath("/api/v1/accounts/" + a.id());
-        assertThat(a.ownerName()).isEqualTo("Anna Hakobyan");
+        assertThat(a.ownerName()).isEqualTo("Hayk Harutyunyan");
         assertThat(a.currency()).isEqualTo(Currency.AMD);
         assertThat(a.status().name()).isEqualTo("ACTIVE");
         assertThat(a.balance()).isEqualByComparingTo("0.00");
@@ -66,14 +66,14 @@ class AccountControllerIT extends AbstractIntegrationTest {
 
     @Test
     void ownerNameIsTrimmed() {
-        AccountResponse a = create(Map.of("ownerName", "   Anna   ", "currency", "USD")).getBody();
+        AccountResponse a = create(Map.of("ownerName", "   Hayk   ", "currency", "USD")).getBody();
 
-        assertThat(a.ownerName()).isEqualTo("Anna");
+        assertThat(a.ownerName()).isEqualTo("Hayk");
     }
 
     @Test
     void createWithOverdraftLimitStoresItWithTwoDecimals() {
-        AccountResponse a = create(Map.of("ownerName", "Anna", "currency", "EUR", "overdraftLimit", "75.5")).getBody();
+        AccountResponse a = create(Map.of("ownerName", "Hayk", "currency", "EUR", "overdraftLimit", "75.5")).getBody();
 
         assertThat(a.overdraftLimit()).isEqualByComparingTo("75.50");
         assertThat(a.balance()).isEqualByComparingTo("0.00");
@@ -83,7 +83,7 @@ class AccountControllerIT extends AbstractIntegrationTest {
     void initialBalanceIsFundedFromTheSettlementAccountAsAnOpeningDeposit() {
         BigDecimal settlementBefore = settlementBalance(Currency.RUB);
 
-        AccountResponse a = create(Map.of("ownerName", "Anna", "currency", "RUB", "initialBalance", "250.75")).getBody();
+        AccountResponse a = create(Map.of("ownerName", "Hayk", "currency", "RUB", "initialBalance", "250.75")).getBody();
 
         assertThat(a.balance()).isEqualByComparingTo("250.75");
         // the money came from the bank's settlement account, not from nowhere
@@ -100,7 +100,7 @@ class AccountControllerIT extends AbstractIntegrationTest {
 
     @Test
     void zeroInitialBalanceCreatesNoTransferAtAll() {
-        AccountResponse a = create(Map.of("ownerName", "Anna", "currency", "AMD", "initialBalance", "0")).getBody();
+        AccountResponse a = create(Map.of("ownerName", "Hayk", "currency", "AMD", "initialBalance", "0")).getBody();
 
         assertThat(jdbc.queryForObject("select count(*) from transfers where target_account_id = ?", Integer.class, a.id())).isZero();
     }
@@ -109,7 +109,7 @@ class AccountControllerIT extends AbstractIntegrationTest {
     void everyCreatedAccountGetsADifferentIban() {
         List<String> ibans = new ArrayList<>();
         for (int i = 0; i < 5; i++) {
-            ibans.add(create(Map.of("ownerName", "Anna", "currency", "AMD")).getBody().iban());
+            ibans.add(create(Map.of("ownerName", "Hayk", "currency", "AMD")).getBody().iban());
         }
 
         assertThat(ibans).doesNotHaveDuplicates();
@@ -125,7 +125,7 @@ class AccountControllerIT extends AbstractIntegrationTest {
         for (int i = 0; i < n; i++) {
             futures.add(pool.submit(() -> {
                 gate.await();
-                return create(Map.of("ownerName", "Anna", "currency", "EUR", "initialBalance", "10.00"));
+                return create(Map.of("ownerName", "Hayk", "currency", "EUR", "initialBalance", "10.00"));
             }));
         }
         gate.countDown();
@@ -153,10 +153,10 @@ class AccountControllerIT extends AbstractIntegrationTest {
                 Map.<String, Object>of("ownerName", "", "currency", "AMD"),
                 Map.<String, Object>of("ownerName", "   ", "currency", "AMD"),
                 Map.<String, Object>of("ownerName", "x".repeat(201), "currency", "AMD"),
-                Map.<String, Object>of("ownerName", "Anna"),
-                Map.<String, Object>of("ownerName", "Anna", "currency", "AMD", "initialBalance", "-1"),
-                Map.<String, Object>of("ownerName", "Anna", "currency", "AMD", "initialBalance", "1.005"),
-                Map.<String, Object>of("ownerName", "Anna", "currency", "AMD", "overdraftLimit", "-0.01"))) {
+                Map.<String, Object>of("ownerName", "Hayk"),
+                Map.<String, Object>of("ownerName", "Hayk", "currency", "AMD", "initialBalance", "-1"),
+                Map.<String, Object>of("ownerName", "Hayk", "currency", "AMD", "initialBalance", "1.005"),
+                Map.<String, Object>of("ownerName", "Hayk", "currency", "AMD", "overdraftLimit", "-0.01"))) {
             ResponseEntity<Map> r = createExpectingError(body);
             assertThat(r.getStatusCode()).as(body.toString()).isEqualTo(HttpStatus.BAD_REQUEST);
             assertThat(r.getBody()).as(body.toString()).containsEntry("code", "VALIDATION_FAILED");
@@ -175,7 +175,7 @@ class AccountControllerIT extends AbstractIntegrationTest {
 
     @Test
     void unknownCurrencyIsRejectedAsMalformedRequest() {
-        ResponseEntity<Map> r = createExpectingError(Map.of("ownerName", "Anna", "currency", "GBP"));
+        ResponseEntity<Map> r = createExpectingError(Map.of("ownerName", "Hayk", "currency", "GBP"));
 
         assertThat(r.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(r.getBody()).containsEntry("code", "MALFORMED_REQUEST");
@@ -196,7 +196,7 @@ class AccountControllerIT extends AbstractIntegrationTest {
 
     @Test
     void getReturnsTheStoredAccount() {
-        AccountResponse created = create(Map.of("ownerName", "Anna", "currency", "AMD", "initialBalance", "40.00",
+        AccountResponse created = create(Map.of("ownerName", "Hayk", "currency", "AMD", "initialBalance", "40.00",
                 "overdraftLimit", "10.00")).getBody();
 
         ResponseEntity<AccountResponse> r = rest.getForEntity("/api/v1/accounts/" + created.id(), AccountResponse.class);
@@ -210,7 +210,7 @@ class AccountControllerIT extends AbstractIntegrationTest {
 
     @Test
     void getReflectsAFrozenAccount() {
-        AccountResponse created = create(Map.of("ownerName", "Anna", "currency", "AMD")).getBody();
+        AccountResponse created = create(Map.of("ownerName", "Hayk", "currency", "AMD")).getBody();
         jdbc.update("update accounts set status = 'FROZEN' where id = ?", created.id());
 
         AccountResponse r = rest.getForObject("/api/v1/accounts/" + created.id(), AccountResponse.class);

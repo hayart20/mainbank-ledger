@@ -40,7 +40,7 @@ class NotificationServiceTest {
 
     private TransferCompletedMessage message(String type) {
         return new TransferCompletedMessage(id, type,
-                "AM11", "Anna", "AM22", "Bob", new BigDecimal("25.50"), "USD");
+                "AM11", "Hayk", "AM22", "Bob", new BigDecimal("25.50"), "USD");
     }
 
     @Test
@@ -51,8 +51,8 @@ class NotificationServiceTest {
         verify(sender, org.mockito.Mockito.times(2)).send(notices.capture());
         assertThat(notices.getAllValues()).extracting(Notice::role, Notice::recipient, Notice::text)
                 .containsExactly(
-                        org.assertj.core.groups.Tuple.tuple("DEBIT", "Anna", "You sent 25.50 USD to Bob (AM22)"),
-                        org.assertj.core.groups.Tuple.tuple("CREDIT", "Bob", "You received 25.50 USD from Anna (AM11)"));
+                        org.assertj.core.groups.Tuple.tuple("DEBIT", "Hayk", "You sent 25.50 USD to Bob (AM22)"),
+                        org.assertj.core.groups.Tuple.tuple("CREDIT", "Bob", "You received 25.50 USD from Hayk (AM11)"));
     }
 
     @Test

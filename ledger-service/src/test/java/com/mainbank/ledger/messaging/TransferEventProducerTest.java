@@ -28,7 +28,7 @@ class TransferEventProducerTest {
     private TransferEventProducer producer;
     private final UUID id = UUID.randomUUID();
     private final TransferCompletedMessage message = new TransferCompletedMessage(TransferCompletedMessage.SCHEMA_VERSION,
-            id, "TRANSFER", Instant.parse("2026-01-02T03:04:05.123Z"), UUID.randomUUID(), "AM11", "Anna",
+            id, "TRANSFER", Instant.parse("2026-01-02T03:04:05.123Z"), UUID.randomUUID(), "AM11", "Hayk",
             UUID.randomUUID(), "AM22", "Bob", new BigDecimal("12.30"), "AMD");
 
     @BeforeEach
