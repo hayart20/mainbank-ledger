@@ -245,6 +245,33 @@ services:
       retries: 20
       start_period: 15s
 
+  # AKHQ: Kafka UI (topics, messages, consumer groups) on http://localhost:8081
+  akhq:
+    image: tchiotludo/akhq
+    restart: unless-stopped
+    environment:
+      AKHQ_CONFIGURATION: |
+        akhq:
+          connections:
+            docker-kafka-server:
+              properties:
+                bootstrap.servers: "kafka:9092"
+    ports:
+      - "8081:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@local.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+
 volumes:
   pgdata:
   miniodata:

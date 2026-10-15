@@ -46,10 +46,6 @@ public class ReceiptService {
         generate(m.transferId());
     }
 
-    public boolean exists(UUID transferId) {
-        return receipts.existsById(transferId);
-    }
-
     /** Failures are recorded and left to {@link #retryPending()}; they never propagate to the Kafka listener. */
     void generate(UUID transferId) {
         Receipt receipt = receipts.findById(transferId).orElse(null);

@@ -65,6 +65,9 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
     urls:
+      # every endpoint on one page: merged on request from the specs below (MergedOpenApiController)
+      - name: all services
+        url: /docs/all/v3/api-docs
       - name: ledger-service (accounts, transfers)
         url: /docs/ledger/v3/api-docs
       - name: receipt-service (receipts)
@@ -74,7 +77,6 @@ springdoc:
       # the gateway's own spec: the system-status endpoint (everything else is routed to the services)
       - name: api-gateway (system status)
         url: /v3/api-docs
-    urls-primary-name: ledger-service (accounts, transfers)
 
 server:
   port: 8080

@@ -34,15 +34,10 @@ public class TransferCompletedConsumer {
         if (message.transferId() == null) {
             throw new IllegalArgumentException("transfer-completed message without transferId: " + payload);
         }
-        if (message.hasDetails()) {
-            receipts.onTransferCompleted(message);
-            return;
+        if (!message.hasDetails()) {
+            // the receipt cannot be reconstructed from the id alone: this service has no ledger access
+            throw new IllegalArgumentException("transfer-completed message without details: " + message.transferId());
         }
-        // Legacy message (published before the event carried details): this service has no ledger access, so it can
-        // only be acknowledged if the receipt was already imported from the ledger.
-        if (!receipts.exists(message.transferId())) {
-            throw new IllegalArgumentException("Legacy transfer-completed message without details and no imported receipt: "
-                    + message.transferId());
-        }
+        receipts.onTransferCompleted(message);
     }
 }
