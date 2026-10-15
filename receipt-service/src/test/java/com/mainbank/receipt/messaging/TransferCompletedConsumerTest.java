@@ -12,11 +12,9 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class TransferCompletedConsumerTest {
@@ -62,23 +60,13 @@ class TransferCompletedConsumerTest {
     }
 
     @Test
-    void legacyMessageForAnImportedReceiptIsAcknowledged() {
+    void messageWithoutDetailsIsRejectedForTheDeadLetterTopic() {
         UUID id = UUID.randomUUID();
-        when(receipts.exists(id)).thenReturn(true);
-
-        assertThatCode(() -> consumer.onTransferCompleted("{\"transferId\":\"" + id + "\"}")).doesNotThrowAnyException();
-
-        verify(receipts).exists(id);
-        verifyNoMoreInteractions(receipts);
-    }
-
-    @Test
-    void legacyMessageWithoutAnImportedReceiptIsRejectedForTheDeadLetterTopic() {
-        UUID id = UUID.randomUUID();
-        when(receipts.exists(id)).thenReturn(false);
 
         assertThatThrownBy(() -> consumer.onTransferCompleted("{\"transferId\":\"" + id + "\"}"))
                 .isInstanceOf(IllegalArgumentException.class);
+
+        verifyNoMoreInteractions(receipts);
     }
 
     @Test

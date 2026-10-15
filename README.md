@@ -248,9 +248,8 @@ receipt-service: @KafkaListener → INSERT receipts ON CONFLICT DO NOTHING → P
   regenerates a `READY` receipt, so redelivery is harmless. Malformed messages go to `ledger.transferEntity.completed.DLT`
   without retries. If MinIO is down the receipt stays `FAILED/PENDING` and a scheduler retries (max 5 attempts);
   several instances are safe because a row is claimed with an optimistic `UPDATE ... WHERE updated_at = :seen`.
-* **Existing receipts were imported** from `transfers.receipt_*` by the receipt service's `V2` migration (a no-op
-  on a fresh database). The now-unused `receipt_*` columns remain on `transfers` and can be dropped in a later
-  ledger migration, once every environment has run the import.
+* **The `receipt_*` columns on `transfers` are unused.** Receipts used to be tracked by the ledger; they now live
+  only in the receipt service's own `receipt` schema, so those columns can be dropped in a ledger migration.
 * **Hashes:** `receipts.details_sha256` = SHA-256 of the canonical transaction string, printed in the PDF
   (re-computable from the ledger). `receipts.pdf_sha256` = digest of the stored file; the details hash is also S3
   object metadata. Object key is deterministic (`receipts/{transferId}.pdf`) and never rewritten once `READY`.
@@ -357,7 +356,7 @@ receipt-service/         the receipt microservice: Kafka consumer, PDF, MinIO, r
     storage/           MinioClient + SigV4 (JDK-only S3 client)
     domain/, repository/  Receipt entity and repository (own `receipt` schema)
     api/, exception/   GET /api/v1/receipts/{transferId}, problem+json errors
-  src/main/resources/db/migration/   V1 receipts table, V2 one-off import from the ledger
+  src/main/resources/db/migration/   V1 receipts table
 notification-service/    consumer: com/mainbank/notification  (NotificationService, NotificationSender, NotificationLog)
 statement-service/       consumer: com/mainbank/statement      (StatementService, StatementRepository, StatementController)
 api-gateway/             Spring Cloud Gateway Server MVC (servlet, virtual threads): routes + Swagger aggregation in application.yml, no code besides the main class
@@ -367,3 +366,30 @@ Build everything with `mvn verify` from the repository root. One root `Dockerfil
 `docker build --build-arg MODULE=receipt-service --build-arg PORT=8081 .` (compose passes these for you).
 Only the gateway is published on the host; each container has a memory limit and its JVM heap is 55% of it
 (`JAVA_OPTS`, which overrides the Dockerfile defaults).
+
+
+links
+
+http://localhost:8080/swagger-ui/index.html#/
+-----------------------------------------------
+http://localhost:8081/ui/docker-kafka-server/topic
+--------------------------------
+http://localhost:5050/
+
+Field	Value
+Host name/address	postgres
+Port	5432
+Maintenance database	mainbank_db
+Username	asb_app
+Password	SecurePassword123!
+Save password	on
+
+--select * from public.accounts;
+--select * from public.transfers;
+--select * from public.ledger_entries;
+--select * from public.outbox_events;
+--select * from receipt.receipts;
+--select * from statement.statement_lines;
+--select * from notification.notifications;
+--------------------------
+
